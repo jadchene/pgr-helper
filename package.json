@@ -1,0 +1,61 @@
+{
+  "name": "@jadchene/pgr-helper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "战双助手：战双帕弥什资料查询与配队攻略桌面助手",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jadchene/pgr-helper.git"
+  },
+  "type": "module",
+  "license": "MIT",
+  "author": "chenjd",
+  "main": "dist/main/index.mjs",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "setup": "install-electron",
+    "predev": "install-electron",
+    "dev": "node scripts/dev.mjs",
+    "prestart": "install-electron",
+    "start": "electron .",
+    "typecheck": "vue-tsc --noEmit",
+    "build:main": "tsup --config tsup.main.config.ts",
+    "build:preload": "tsup --config tsup.preload.config.ts",
+    "build": "npm run typecheck && npm run build:main && npm run build:preload && vite build",
+    "test": "vitest run",
+    "test:dev": "npm run build:main && npm run build:preload && node scripts/check-dev-renderer.mjs",
+    "test:dev:window": "node scripts/check-dev-window.mjs",
+    "test:desktop": "node scripts/smoke-electron.mjs",
+    "test:fonts": "node scripts/check-system-fonts.mjs",
+    "test:catalog": "tsx scripts/check-catalog-controls.ts",
+    "test:filters": "tsx scripts/check-filter-popovers.ts",
+    "test:images": "tsx scripts/check-asset-images.ts",
+    "test:details": "tsx scripts/check-detail-navigation.ts",
+    "test:skills": "tsx scripts/check-skill-layout.ts",
+    "test:guides": "tsx scripts/check-guides.ts",
+    "test:guides:links": "tsx scripts/check-guide-links.ts",
+    "test:packaged": "node scripts/smoke-packaged.mjs",
+    "pack": "npm run build && electron-builder --dir"
+  },
+  "dependencies": {
+    "lucide-vue-next": "^0.577.0",
+    "naive-ui": "^2.45.3",
+    "vue": "^3.5.45",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24.19.2",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
+    "tsup": "^9.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0",
+    "vue-tsc": "^3.3.14"
+  }
+}

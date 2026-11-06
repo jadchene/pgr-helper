@@ -1,0 +1,15 @@
+appId: io.jadchene.pgr-helper
+productName: 战双助手
+electronDist: node_modules/electron/dist
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+extraResources:
+  - from: resources/icon.png
+    to: icon.png
+asar: true
+win:
+  target: dir
+  icon: resources/icon.ico

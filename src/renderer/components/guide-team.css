@@ -1,0 +1,154 @@
+.guide-team-overview {
+  container-type: inline-size;
+  min-width: 0;
+  max-width: 100%;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.guide-overview-heading,
+.guide-card-position,
+.guide-member-editor-heading,
+.guide-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.guide-overview-heading { margin-bottom: 12px; }
+.guide-overview-heading h2 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.guide-overview-member-count { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.guide-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 14px; }
+.guide-member-card {
+  --position-color: #5b83cf;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--position-color);
+  border-radius: 8px;
+  background: var(--subtle);
+  padding: 10px;
+  overflow-wrap: anywhere;
+}
+.guide-member-card[data-position="red"],
+.guide-team-member-tabs > button[data-position="red"] { --position-color: #d96976; }
+.guide-member-card[data-position="yellow"],
+.guide-team-member-tabs > button[data-position="yellow"] { --position-color: #d4a33e; }
+.guide-card-position { min-height: 21px; color: var(--muted); font-size: 11px; }
+.guide-card-position > span { color: var(--position-color); font-weight: 650; }
+.guide-role-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.guide-role-badges > span { display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px; border-radius: 4px; color: var(--text); background: var(--surface); }
+.guide-card-character { display: flex; gap: 10px; align-items: center; margin: 8px 0 10px; }
+.guide-card-character > div:last-child { min-width: 0; }
+.guide-card-character .entry-artwork { width: 58px; height: 64px; }
+.guide-card-character h3 { font-size: 15px; line-height: 1.55; margin: 0 0 4px; }
+.guide-card-character p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
+.guide-evolution { display: inline-block; color: var(--accent-text); font-size: 15px; font-weight: 700; }
+.guide-card-section { padding-top: 9px; margin-top: 9px; border-top: 1px solid var(--border); }
+.guide-card-section h4 { margin: 0 0 7px; font-size: 12px; font-weight: 650; }
+.guide-memory-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.guide-memory-chip { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 6px 8px; min-width: 0; max-width: 100%; border: 1px solid var(--border); border-radius: 5px; font-size: 11px; background: var(--surface); }
+.guide-memory-chip strong { font-variant-numeric: tabular-nums; }
+.guide-memory-chip small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
+.guide-memory-chip.has-harmonization { border-color: color-mix(in srgb, var(--position-color) 45%, var(--border)); }
+.guide-memory-resonance { margin-top: 8px; display: grid; gap: 5px; font-size: 11px; }
+.guide-memory-resonance > div,
+.guide-harmonization,
+.guide-pet-active,
+.guide-pet-passive { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 6px; align-items: start; line-height: 1.7; }
+.guide-memory-resonance > div > span,
+.guide-harmonization > span,
+.guide-pet-active > span,
+.guide-pet-passive > span { color: var(--muted); }
+.guide-memory-resonance ul,
+.guide-pet-passive ul { padding: 0; margin: 0; list-style: none; }
+.guide-memory-resonance li + li,
+.guide-pet-passive li + li { margin-top: 3px; }
+.guide-memory-resonance em,
+.guide-harmonization em,
+.guide-pet-passive em { color: var(--faint); font-style: normal; }
+.guide-equipped-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.guide-equipped-heading > div:last-child { min-width: 0; }
+.guide-equipped-heading h4 { margin: 0 0 2px; color: var(--muted); font-weight: 400; font-size: 10px; }
+.guide-equipped-heading strong { font-size: 12px; line-height: 1.55; }
+.guide-equipped-heading .entry-artwork { flex: none; width: 34px; height: 36px; }
+.guide-pet-quality { margin-left: 7px; color: var(--accent-text); font-size: 12px; font-weight: 650; }
+.guide-weapon-resonances { display: grid; gap: 3px; padding: 0; margin: 0 0 7px; list-style: none; font-size: 11px; line-height: 1.6; }
+.guide-weapon-resonances li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; }
+.guide-weapon-resonances li > span { text-align: center; color: var(--faint); background: var(--surface); border: 1px solid var(--border); border-radius: 3px; font-size: 10px; }
+.guide-harmonization { font-size: 11px; }
+.guide-harmonization strong { font-weight: 500; }
+.guide-harmonization p,
+.guide-pet-active p { margin: 1px 0 0; }
+.guide-pet-active,
+.guide-pet-passive { margin-top: 6px; font-size: 11px; }
+.guide-pet-passive .guide-passive-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.guide-passive-chips > li { padding: 2px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); line-height: 1.5; }
+.guide-pet-passive .guide-passive-chips > li + li { margin-top: 0; }
+.guide-member-notes { white-space: pre-wrap; margin: 13px 0 0; padding-top: 10px; border-top: 1px dashed var(--border); color: var(--muted); font-size: 11px; line-height: 1.7; }
+.guide-empty-position { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 230px; color: var(--faint); }
+.guide-config-empty { margin: 0; color: var(--faint); font-size: 11px; }
+.guide-team-effects { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px; border-radius: 7px; background: var(--subtle); font-size: 12px; }
+.guide-team-effects > span { display: inline-flex; align-items: center; gap: 7px; }
+.guide-team-effects > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.guide-team-effects strong { padding: 3px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; font-size: 11px; font-weight: 500; }
+.guide-team-effects p { margin: 0; color: var(--muted); }
+.guide-overview-notes { margin: 14px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.8; color: var(--muted); }
+
+.guide-team-editor { container-type: inline-size; min-width: 0; }
+.guide-team-member-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.guide-team-member-tabs > button { --position-color: #5b83cf; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; min-height: 65px; padding: 10px 12px; border: 1px solid var(--border); border-top: 3px solid var(--position-color); border-radius: 7px; background: var(--surface); color: var(--muted); text-align: left; }
+.guide-team-member-tabs > button.active { color: var(--text); border-color: var(--position-color); background: color-mix(in srgb, var(--position-color) 8%, var(--surface)); }
+.guide-team-member-tabs > button strong { font-size: 12px; color: var(--position-color); }
+.guide-team-member-tabs > button > span { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.guide-team-global-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+.guide-form-field { display: flex; flex-direction: column; align-items: stretch; gap: 7px; min-width: 0; margin-bottom: 13px; }
+.guide-form-field > span { display: flex; align-items: center; gap: 5px; color: var(--text); font-size: 12px; font-weight: 550; }
+.guide-form-field > small { color: var(--muted); font-size: 11px; line-height: 1.6; }
+.guide-full-field { grid-column: 1 / -1; }
+.guide-team-global-fields .guide-form-field { margin-bottom: 0; }
+.guide-member-editor { min-width: 0; padding-top: 18px; border-top: 1px solid var(--border); }
+.guide-member-editor-heading { margin-bottom: 12px; }
+.guide-member-editor-heading h3 { margin: 0; font-size: 16px; }
+.guide-team-empty { padding: 38px 18px; text-align: center; color: var(--muted); background: var(--subtle); border: 1px dashed var(--border); border-radius: 8px; font-size: 13px; }
+.guide-config-section { margin-bottom: 22px; padding: 17px; border: 1px solid var(--border); border-radius: 9px; min-width: 0; }
+.guide-config-section h4 { margin: 0 0 14px; font-size: 13px; }
+.guide-config-section h4 > small { margin-left: 7px; color: var(--muted); font-weight: 400; font-size: 11px; }
+.guide-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.guide-preset-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.guide-preset-buttons > span { margin-right: 2px; color: var(--muted); font-size: 11px; }
+.guide-config-help { margin: -2px 0 13px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.guide-allocation-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px 30px; gap: 8px; align-items: center; margin-bottom: 9px; min-width: 0; }
+.guide-allocation-row > * { min-width: 0; }
+.guide-inline-alert { margin-top: 12px; }
+.guide-resonance-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
+.guide-resonance-side { min-width: 0; padding: 12px; background: var(--subtle); border-radius: 7px; }
+.guide-resonance-side h5 { margin: 0 0 10px; font-size: 12px; }
+.guide-resonance-side h5 > span { margin-left: 8px; color: var(--muted); font-weight: 400; }
+.guide-resonance-side > .n-select { margin-bottom: 10px; }
+.guide-resonance-side .guide-allocation-row { grid-template-columns: minmax(0, 1fr) 91px 28px; gap: 5px; }
+.guide-weapon-resonance-editor { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.guide-effect-details { margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.guide-effect-details summary { cursor: pointer; color: var(--muted); }
+.guide-effect-details > div { margin-top: 14px; }
+.guide-effect-details > div:first-of-type { margin-top: 11px; }
+.guide-effect-details p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; margin: 8px 0 0; }
+.guide-config-error { color: var(--red); font-size: 12px; line-height: 1.7; }
+.guide-team-editor .n-select,
+.guide-team-editor .n-input-number { width: 100%; min-width: 0; }
+@container (max-width: 700px) {
+  .guide-resonance-sides { grid-template-columns: minmax(0, 1fr); }
+  .guide-config-section { padding: 13px; }
+  .guide-weapon-resonance-editor { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+@container (max-width: 600px) {
+  .guide-overview-grid { grid-template-columns: minmax(0, 1fr); }
+  .guide-empty-position { min-height: 80px; }
+  .guide-card-character .entry-artwork { width: 72px; height: 82px; }
+}
+@container (max-width: 430px) {
+  .guide-config-grid,
+  .guide-team-global-fields { grid-template-columns: minmax(0, 1fr); }
+  .guide-team-member-tabs > button { padding: 9px 7px; }
+}
