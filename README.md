@@ -2,57 +2,71 @@
 
 English | [简体中文](README.zh-CN.md)
 
-A desktop assistant for Punishing: Gray Raven. Current features include reference data browsing and editing, team configurations, and stage action flows, with data stored locally.
+A desktop companion for **Punishing: Gray Raven**: browse reference data, save equipment presets, and record stage guides and action sequences in one place.
 
-## Using the app
+![Version 1.0.0](https://img.shields.io/badge/version-1.0.0-orange)
+![Windows](https://img.shields.io/badge/platform-Windows-blue)
+![MIT](https://img.shields.io/badge/license-MIT-green)
 
-Open `战双助手.exe` in the Windows application directory. Keep the entire directory in a writable location: the database, settings, caches, and pre-restore backups are stored in the adjacent `data` directory. Move the whole directory when relocating the app.
+![Character catalog and filters](docs/screenshots/catalog.png)
 
-The catalog is empty on first launch. The app opens the initial synchronization page, where you can fetch the catalog, review the preview, and activate the version. The first synchronization requires an internet connection. Once activated, the catalog is stored locally for offline browsing.
+## Features
 
-Select a category and search names or aliases. Each category has its own filters: character elements, classes, and enhancement skills; memory purposes and set sizes; weapon types and recommended characters; or stage modes, difficulty, and configuration status. Filters only change the list after you apply them. Click a card or list entry to open its detail page with skills, set effects, and related entries. The back-to-list button restores the original search, filters, sort order, page, and scroll position. Following related entries also returns to that original list.
+- **Reference catalog** — Characters, memories, weapons, resonances, companions, stages, weather/modifiers, and dictionaries. Search names or aliases, filter by category, and browse grouped skills and related entries.
+- **Configuration presets** — Save character progression, weapons, companions, and multiple memory loadouts. Reuse standalone memory and companion presets in guide teams.
+- **Stage guides** — Link a guide to multiple stages and record a three-member team, equipment, videos, and notes. Separate overview and editing pages, quick position swaps, duplication, drafts, and a recycle bin.
+- **Action flows** — Record switches, orbs, ultimates, attacks, dodges, and ordered QTE calls. Use repetition counts, holds, compact same-character groups, group notes, parallel branches, and an optional loop entry.
+- **Local storage** — Manual catalog updates with previews and rollback, local edits, backup/restore, light and dark themes, and installed system fonts.
 
-Characters and companions default to descending source order. Weapons use explicitly recommended characters as an ordering reference; memories, resonances, stages, and weather use category-specific groups. Upstream provides no individual release dates, so these orders are approximate references. Open the information icon beside the sort selector for each category's basis, or switch to name order.
+Equipment, skills, and dictionary options use artwork. Hover or focus overview icons for details. Screenshot configurations demonstrate the interface; they are not gameplay recommendations. The current interface and catalog are in Simplified Chinese.
 
-Character skills follow upstream categories, with Uniframe and Leap skills kept separate. Choose a category and skill to read its full description; multiple source versions remain selectable even when they share a name. Companions have active and passive groups. Elemental variants of an active skill share one entry with buttons for each variant's exact name, level, values, and effects. Grouping comes from source relationships and updates with synchronization. After upgrading the app, check for updates and activate the catalog to obtain the latest skill structure. Locally edited descriptions retain priority.
+## Screenshots
 
-Add entries or edit existing ones from their details. Edits to upstream entries are stored separately and survive synchronization; “Restore source content” removes all local field edits for an entry. Deleted entries go to a recoverable recycle bin. Entries without artwork use a category icon, and local images can be attached in the editor.
+### Character presets
 
-## Stage guides
+![Character preset with compact memory loadouts](docs/screenshots/preset.png)
 
-Open Stage Guides in the sidebar or create a linked guide from a stage detail page. A guide can apply to multiple stages and include a name, recorded time, expected battle duration, notes, and reference video URLs. Video links open in the system browser. Save unfinished work as a draft; marking it complete requires valid stages, a team, and an action flow. Guides can be edited, duplicated, moved to their recycle bin, and restored.
+### Team overview
 
-Configure blue, red, and yellow positions, with separate starting-member and captain choices. Character evolution stages are independent of initial catalog rank: SSS and SSS3 remain distinct, with their additional effects available for inspection. Companions have an actual rank, one active skill, and the passive slots allowed at that rank. Memory presets cover 4+2, 2+2+2, and six pieces. Upper and lower resonance rows are separate, with mixed counts or a shortcut for six identical resonances. Weapons have three resonance slots and source-defined harmonization stages with a bound memory set. Extra set counts come from source data. Team effects are selected from the configured members. The detail page presents a compact team overview, including both memory resonance rows.
+![Stage guide team configuration](docs/screenshots/team.png)
 
-Action flows have single-run and repeating modes. Add character switches, red/yellow/blue/special orbs, ultimate skills, dodges, normal attacks, and QTE nodes. Skills, dodges, and attacks default to a tap and can use a hold. Nodes support durations, notes, insertion, duplication, reordering, and removal. Parallel branches start alongside their parent action, run their own sequences, and join before the next main action; this can represent QTE calls during a held attack. A QTE node preserves an ordered sequence of multiple or repeated characters, but only permits off-field members. Validation includes later loop iterations and possible concurrent switches.
+### Action flows
 
-Use the overview tab to review the team and connected flow. Save with `Ctrl+Enter`; leaving or closing protects unsaved changes. Guides are stored independently, so catalog synchronization and rollback do not overwrite them. When upstream changes invalidate a selection, the original configuration stays available for correction. After upgrading, check for updates and activate the catalog to obtain current evolution and equipment options.
+![Grouped actions with portraits and notes](docs/screenshots/flow.png)
 
-## Catalog synchronization
+## Getting started
 
-After the first synchronization, use the synchronization center to check for updates. Review added, changed, and removed entries before activating the candidate. Failed or canceled checks leave the current catalog intact and can be retried later.
+Build from source on Windows using the instructions below, then run `release/win-unpacked/战双助手.exe`. Keep the entire application directory in a writable location.
 
-Catalog data comes directly from the remote Chinese-server directory in [myssal/PGR_Data](https://github.com/myssal/PGR_Data). Access to the GitHub API and raw.githubusercontent.com is required. Only the necessary catalog files are downloaded; previously validated content at the same version can be reused from cache.
+1. On first launch, select **获取基础资料** to fetch the catalog.
+2. Review the preview and select **启用这个版本** to activate it. No catalog is bundled, and no local data-repository clone is required.
+3. Browse the sidebar categories or open **配置预设** (presets) and **副本攻略** (stage guides).
 
-Catalog artwork comes from [undertheobservers/PGR_Assets](https://github.com/undertheobservers/PGR_Assets). Each update check independently checks the image version, which is activated after you confirm the preview. The application downloads images as they are viewed, stores them in `data/image-cache`, and never clones the entire image repository. Cached images remain available offline. The image source can lag behind catalog data; missing or failed images use category icons, and locally assigned images take priority. If an image version check fails, the last confirmed version is reused; without one, text synchronization remains available.
+Initial synchronization needs access to the GitHub API and `raw.githubusercontent.com`. Synced text remains available offline. Images download on demand; only cached images are available offline. Missing images use category placeholders.
 
-The last five catalog versions are retained for rollback. Local entries, edits, and recycle-bin state survive version changes.
+Catalog filters require **应用筛选** (Apply); guide and general-preset filters apply immediately. Returning from details preserves the list's filters and scroll position. Long detail and equipment pages provide section navigation.
 
-Upstream data includes historical and candidate configurations. Stage entries do not establish the current weekly rotation or server availability. Some entries have no artwork field, so image coverage does not establish catalog completeness.
+### Data and backups
 
-## Settings and backups
+- Development uses the project-root `data/` directory. Packaged apps use `data/` beside the executable. Move this directory with the app.
+- Export and restore JSON backups in Settings. Restore replaces current content and first saves the previous state under `data/backups/`.
+- Backups include catalog versions, local edits, presets, guides, and settings. Downloaded remote-image caches are excluded; retain the entire `data/` directory for a full offline transfer.
+- Updates are previewed before activation. Failed or canceled checks leave active data unchanged. The latest five catalog versions can be restored; local edits, presets, and guides are preserved independently.
 
-Settings provide light, dark, and system themes, plus a searchable list of installed fonts with an immediate preview and application across the interface. Font choices are saved automatically; choose the system default to reset, or refresh to retry a failed font listing. Settings also provide the data directory and backup export and restore. After the first synchronization, you can enable startup checks. They are disabled by default and only prepare a preview; they never activate a candidate automatically.
+### Shortcuts
 
-Backups include catalog versions, local entries, field edits, complete guides with teams and flows, recycle-bin state, embedded images, and settings. Restoring replaces the current contents after automatically exporting the previous state to `data/backups`. Backup files may include local paths and personal notes; store them according to your needs.
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+K` | Search catalog |
+| `Ctrl+N` | Add catalog entry |
+| `Ctrl+Enter` | Save current edit |
+| `Ctrl+W` | Close window |
 
-Remote image versions and URLs are included in backups, but downloaded images are excluded from JSON backups. Images can be downloaded again after restoring on another computer. Move the application's entire `data` directory to preserve the complete offline state.
+Unsaved edits prompt before leaving. Red/yellow/blue orbs, attacks, and dodges default to one tap; set a count or hold when needed. Without a loop entry, a flow runs once. Steps before a loop entry form its one-time startup sequence.
 
-Shortcuts: `Ctrl+K` to search, `Ctrl+N` to add an entry, `Ctrl+Enter` to save edits, and `Ctrl+W` to close the window. Unsaved edits trigger a confirmation.
+## Development and builds
 
-## Development and local builds
-
-Node.js 24 or later is required.
+Requires **Windows, Node.js 24+, and npm**.
 
 ```powershell
 npm ci
@@ -62,23 +76,21 @@ npm run dev
 
 ```powershell
 npm test
-npm run test:dev
-npm run test:dev:window
 npm run build
 npm start
 npm run pack
 ```
 
-`pack` creates the runnable `release/win-unpacked` directory. Development data lives in the project's `data` directory. Restart the development process after main-process changes.
+Packaging produces `release/win-unpacked/` without personal data. Restart `npm run dev` after changing the main process or preload code.
 
-`test:dev` runs desktop UI checks with isolated data. Stop the development server first, as the checks use port 5178.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance, source-data tests, and desktop checks. Include reproduction steps, app version, and error messages when reporting a problem. Do not upload personal databases or backups.
 
-`test:dev:window` verifies native window visibility on Windows. It briefly opens and closes a test window and also requires port 5178 to be available.
+## Sources and scope
 
-For tests against complete source tables, set `PGR_DATA_REPOSITORY` to a separate `myssal/PGR_Data` Git audit checkout. Without it, `npm test` skips cases requiring the full dataset. After `npm run build`, `npm run test:guides` fills the team and flow through the desktop UI and checks persistence after restarting, using isolated test data. The audit checkout is only a development fixture; the app does not need a local repository to run or sync.
+- Catalog: [myssal/PGR_Data](https://github.com/myssal/PGR_Data). Required CN-server files are fetched remotely and cached by version.
+- Artwork: [undertheobservers/PGR_Assets](https://github.com/undertheobservers/PGR_Assets). Images are pinned to a source version and downloaded on demand, without cloning the repository.
+- Layout and theme inspiration: [CC Switch](https://github.com/farion1231/cc-switch).
 
-## Sources and license
+Catalog and artwork updates may lag or contain gaps. Static stage configurations include historical content and are not a live weekly schedule. The app does not read game accounts or live battle state, and does not automate gameplay.
 
-The layout and theme are inspired by [CC Switch](https://github.com/farion1231/cc-switch); catalog cards and sectioned details support reference reading. Application code is [MIT licensed](LICENSE). Game data, names, and artwork belong to their respective rights holders; the application license does not alter their ownership.
-
-The app provides reference maintenance and stage guide recording, with all configurations and action flows stored locally.
+This is an unofficial community project, unaffiliated with the game's publisher. Application code is [MIT licensed](LICENSE). Game names, data, and artwork shown in screenshots belong to their respective rights holders and are not covered by this code license.

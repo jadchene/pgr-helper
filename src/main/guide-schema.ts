@@ -12,7 +12,8 @@ const webUrl = text(4000).refine(value => {
 const nodeSchema: z.ZodType<FlowNode> = z.lazy(() => z.object({
   id: text(100).min(1), type: z.enum(['switch', 'skill', 'dodge', 'attack', 'qte']), memberId: text(100),
   skill: z.enum(['red', 'yellow', 'blue', 'special', 'ultimate']), press: z.enum(['tap', 'hold']),
-  qteMemberIds: z.array(text(100)).max(flowLimits.qte), durationSeconds: z.number().finite().min(0).max(flowLimits.durationSeconds).nullable(),
+  count: z.number().int().min(1).max(999), group: z.number().int().min(0),
+  qteMemberIds: z.array(text(100)).max(flowLimits.qte),
   notes: text(10000), branches: z.array(z.array(nodeSchema).max(flowLimits.nodes)).max(flowLimits.branches),
 }).strict());
 /** 递归数据先校验边界，防止异常 IPC 或备份导致递归溢出。 */
@@ -37,7 +38,7 @@ const boundedFlow = z.preprocess((input, context) => {
     }
   }
   return input;
-}, z.object({ mode: z.enum(['single', 'loop']), nodes: z.array(nodeSchema).max(flowLimits.nodes) }).strict());
+}, z.object({ mode: z.enum(['single', 'loop']), groupNotes: z.record(z.string().regex(/^[1-9]\d*$/), text(4000)).optional(), loopStartId: text(100).optional(), nodes: z.array(nodeSchema).max(flowLimits.nodes) }).strict());
 /** 单个共鸣的数量，空标识允许暂存草稿。 */
 const resonanceAllocation = z.object({ resonanceId: text(180), count: z.number().int().min(1).max(6) }).strict();
 /** 主进程与备份的攻略格式校验。 */

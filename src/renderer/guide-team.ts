@@ -1,6 +1,7 @@
 import type { CatalogEntry, EntryView } from '../shared/types';
 import type { SelectOption } from 'naive-ui';
 import type { GuideEntryOptions } from '../shared/guide-options';
+import { compareCatalogEntries, facetValues } from './catalog-query';
 import { teamPositions, type GuideMember, type GuideTeam, type TeamPosition } from '../shared/guides';
 
 /** 下拉选项及当前组合的可分配数量。 @author chenjd @created 2026-11-06 17:40:00 */
@@ -52,10 +53,61 @@ export const preserveGuideChoices = (choices: GuideChoice[], selectedIds: string
 };
 
 /** 在基础资料中选择可见条目，不隐藏当前已经选择的失效项。 */
-export const guideCatalogChoices = (entries: readonly EntryView[], category: CatalogEntry['category'], selectedIds: string[] = [], allowed?: (entry: EntryView) => boolean): GuideChoice[] => {
+export const guideCatalogChoices = (entries: readonly EntryView[], category: CatalogEntry['category'], selectedIds: string[] = [], allowed?: (entry: EntryView) => boolean, context: { characterId?: string; facets?: GuideFilters } = {}): GuideChoice[] => {
+  const character = entries.find(entry => entry.id === context.characterId);
+  const rank = (entry: CatalogEntry): number => {
+    if (!character) return 0;
+    if (character.relatedIds.includes(entry.id) || entry.relatedIds.includes(character.id)) return 0;
+    const characterTags = new Set([...character.tags, ...(character.catalog?.facets.element || []), ...(character.catalog?.facets.profession || []), character.element, character.profession].filter(value => value && value !== '未提供'));
+    return guideFilterTags(entry).some(tag => characterTags.has(tag)) ? 1 : 2;
+  };
   const choices = entries.filter(entry => entry.category === category && !entry.hidden && !entry.retired && (!allowed || allowed(entry)))
+    .filter(entry => selectedIds.includes(entry.id) || matchesGuideFilters(entry, context.facets))
+    .sort((left, right) => rank(left) - rank(right) || compareCatalogEntries(left, right))
     .map(entry => ({ value: entry.id, label: entry.name }));
   return preserveGuideChoices(choices, selectedIds, entries);
+};
+
+/** 各筛选项分别保存，避免不同字段中的同名值相互误匹配。 */
+export type GuideFilters = Record<string, string | null>;
+/** 不同字段取交集，清空字段不参与筛选。 */
+export const matchesGuideFilters = (entry: CatalogEntry, filters: GuideFilters = {}): boolean =>
+  Object.entries(filters).every(([key, value]) => !value || facetValues(entry, key).includes(value));
+
+/** 使用已有资料标签及常用分类条件，不推断来源没有提供的属性。 */
+export const guideFilterTags = (entry: CatalogEntry): string[] => [...new Set([
+  ...entry.tags,
+  ...['element', 'profession', 'rarity', 'frameType', 'gameplay', 'skillType'].flatMap(key => entry.catalog?.facets[key] || []),
+].filter(value => value && value !== '未提供'))];
+
+/** 从玩法说明和名称组成简洁标签，重复文本仅出现一次。 */
+const stageLabelParts = (entry: CatalogEntry): string[] => [...new Set([
+  ...entry.subtitle.split(/\s*·\s*/u), entry.name,
+].map(value => value.trim()).filter(Boolean))];
+/** 同名副本以真实难度、区域和规则区分，不向用户展示来源主键。 */
+export const guideStageLabel = (entry: CatalogEntry, entries: readonly CatalogEntry[]): string => {
+  const parts = stageLabelParts(entry);
+  const base = parts.join(' · ');
+  let peers = entries.filter(other => other.category === 'stage' && stageLabelParts(other).join(' · ') === base);
+  if (peers.length < 2) return base;
+  const ruleName = (value: CatalogEntry): string => value.sections.find(section => section.title === '区域规则')?.body.split(/[：:\n]/u)[0].trim() || '';
+  const rule = ruleName(entry);
+  if (rule) { parts.push(rule); peers = peers.filter(other => ruleName(other) === rule); }
+  for (const key of ['mode', 'difficulty', 'area', 'element', 'effect', 'configStatus']) {
+    const values = facetValues(entry, key);
+    if (peers.some(other => facetValues(other, key).join('/') !== values.join('/'))) parts.push(...values);
+  }
+  return [...new Set(parts)].join(' · ');
+};
+
+/** 标签仅缩小候选列表，保留当前选择的有效性及来源顺序。 */
+export const filterGuideChoices = (choices: GuideChoice[], filters: GuideFilters, selectedIds: string[], entries: readonly CatalogEntry[]): GuideChoice[] => {
+  if (!Object.values(filters).some(Boolean)) return choices;
+  const byId = new Map(entries.map(entry => [entry.id, entry]));
+  return choices.filter(choice => {
+    const entry = byId.get(choice.value);
+    return selectedIds.includes(choice.value) || !!entry && matchesGuideFilters(entry, filters);
+  });
 };
 
 /** 仅按照共鸣池的明确机体适用关系筛选。 */
@@ -66,7 +118,11 @@ export const allowedGuideResonances = (entry: CatalogEntry | undefined, slot: nu
 export const weaponResonanceChoices = (member: GuideMember, entries: readonly CatalogEntry[], slot: number): GuideChoice[] => {
   const weapon = entries.find(entry => entry.id === member.weaponId);
   const current = member.weaponResonanceIds[slot - 1] || '';
-  const choices = allowedGuideResonances(weapon, slot, member.characterId).map(id => {
+  const choices = allowedGuideResonances(weapon, slot, member.characterId).sort((left, right) => {
+    const a = entries.find(entry => entry.id === left);
+    const b = entries.find(entry => entry.id === right);
+    return a && b ? compareCatalogEntries(a, b) : 0;
+  }).map(id => {
     const occupied = id !== current && id.startsWith('resonance:weapon-skill-') && member.weaponResonanceIds.some((selected, index) => index !== slot - 1 && selected === id);
     return { value: id, label: `${entries.find(entry => entry.id === id)?.name || '共鸣资料不可用'}${occupied ? '（已在其他槽配置）' : ''}`, disabled: occupied };
   });
@@ -89,7 +145,11 @@ export const memoryResonanceChoices = (member: GuideMember, entries: readonly Ca
       countById.set(id, (countById.get(id) ?? 0) + allocation.count);
     }
   }
-  const choices = [...countById.entries()].map(([id, count]) => ({ value: id, label: `${guideResonanceLabel(entries.find(entry => entry.id === id))}${count < 6 ? ` · 最多 ${count} 次` : ''}`, maxCount: count }));
+  const choices = [...countById.entries()].sort(([left], [right]) => {
+    const a = entries.find(entry => entry.id === left);
+    const b = entries.find(entry => entry.id === right);
+    return a && b ? compareCatalogEntries(a, b) : 0;
+  }).map(([id, count]) => ({ value: id, label: `${guideResonanceLabel(entries.find(entry => entry.id === id))}${count < 6 ? ` · 最多 ${count} 次` : ''}`, maxCount: count }));
   return preserveGuideChoices(choices, member.memoryResonance[side].map(item => item.resonanceId), entries).map(choice => choice.disabled
     ? { ...choice, label: `${guideResonanceLabel(entries.find(entry => entry.id === choice.value))}（当前不可用）` }
     : choice);
@@ -126,5 +186,7 @@ export const guidePetSkillLabel = (pet: CatalogEntry | undefined, id: string): s
   if (!id) return '未配置';
   const section = pet?.sections.find(item => item.skill?.id === id);
   if (!section) return '原技能暂不可用';
-  return [section.title, section.skill?.element?.name].filter(Boolean).join(' · ');
+  const element = section.skill?.element?.name;
+  const parts = section.title.split(/[·・]/).map(value => value.trim());
+  return element && !parts.includes(element) ? `${section.title} · ${element}` : section.title;
 };

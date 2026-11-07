@@ -4,7 +4,7 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --app: #fff;
+  --app: #f8f9fb;
   --sidebar: #f5f5f7;
   --surface: #fff;
   --subtle: #fafafa;
@@ -12,7 +12,7 @@
   --border: #e4e4e7;
   --text: #27272a;
   --muted: #71717a;
-  --faint: #a1a1aa;
+  --faint: #82828e;
   --accent: #f97316;
   --accent-soft: #fff2e8;
   --accent-text: #c4550a;
@@ -58,7 +58,7 @@ pre {
   font-family: var(--app-font-family);
 }
 button {
-  cursor: pointer;
+  cursor: default;
 }
 button:disabled {
   cursor: default;
@@ -335,8 +335,8 @@ a {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 28px 30px 0;
-  gap: 21px;
+  padding: 24px 26px 0;
+  gap: 16px;
   min-height: 0;
 }
 .page-heading {
@@ -352,9 +352,9 @@ a {
   margin-top: 5px;
 }
 .eyebrow {
-  font-size: 10px;
-  color: var(--faint);
-  letter-spacing: 1.3px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.6px;
   margin-bottom: 6px;
 }
 .heading-count {
@@ -373,11 +373,22 @@ a {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
+  flex: none;
+}
+.catalog-filter-bar {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
   flex: none;
 }
 .catalog-search {
-  max-width: 450px;
-  margin-right: auto;
+  width: 100%;
 }
 .catalog-search .n-input__prefix {
   margin-right: 7px !important;
@@ -426,19 +437,17 @@ kbd {
   font-size: 13px;
 }
 .filter-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  /* 为工具栏、面板标题和底部操作保留空间，最小窗口下仍可应用筛选。 */
-  max-height: min(430px, calc(100vh - 330px));
-  overflow-y: auto;
-  padding-right: 5px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 8px 12px;
+  min-width: 0;
 }
 .catalog-order {
   display: flex;
   align-items: center;
   flex: 0 0 204px;
   gap: 4px;
+  margin-left: auto;
 }
 .catalog-order .n-select {
   min-width: 0;
@@ -453,11 +462,11 @@ kbd {
   gap: 5px;
   font-size: 11px;
   color: var(--muted);
+  min-width: 0;
 }
 .filter-actions {
   display: flex;
-  justify-content: space-between;
-  padding-top: 3px;
+  gap: 8px;
 }
 .filter-summary {
   display: flex;
@@ -502,7 +511,7 @@ kbd {
   border-radius: 10px;
   padding: 17px 17px 0;
   background: var(--surface);
-  cursor: pointer;
+  cursor: default;
   transition:
     border-color 0.15s,
     box-shadow 0.15s,
@@ -762,7 +771,7 @@ kbd {
   padding-bottom: 9px;
 }
 .entry-row {
-  cursor: pointer;
+  cursor: default;
   border-top: 1px solid var(--border);
   min-height: 70px;
 }
@@ -887,6 +896,10 @@ kbd {
   padding: 4px 0 32px;
 }
 .detail-hero {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
   display: flex;
   align-items: center;
   gap: 19px;
@@ -918,7 +931,11 @@ kbd {
   margin-top: 20px;
 }
 .detail-section {
-  margin-top: 27px;
+  margin-top: 18px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 .detail-section h2 {
   display: flex;
@@ -934,9 +951,9 @@ kbd {
   font-weight: 400;
 }
 .rich-text {
-  font-size: 12px;
-  line-height: 1.95;
-  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.85;
+  color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -1207,7 +1224,7 @@ kbd {
 }
 .panel-heading h2,
 .setting-row h2 {
-  font-size: 13px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1632,10 +1649,10 @@ kbd {
   }
   .page-layout {
     padding-top: 22px;
-    gap: 17px;
+    gap: 12px;
   }
   .pagination-bar {
-    margin-top: -17px;
+    margin-top: -12px;
   }
   .page-heading h1 {
     font-size: 23px;
@@ -1653,3 +1670,45 @@ kbd {
     animation: none !important;
   }
 }
+
+/* 管理页用固定分区入口与摘要区减少长页面查找。 */
+.settings-jump { display: flex; gap: 8px; flex-wrap: wrap; }
+.settings-jump button { border: 1px solid var(--border); border-radius: 7px; padding: 8px 14px; background: var(--surface); color: var(--muted); font-size: 12px; }
+.settings-jump button:hover { border-color: var(--accent); color: var(--accent-text); }
+.settings-scroll > section { scroll-margin-top: 8px; }
+.sync-status-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; flex: none; max-width: 1050px; }
+.sync-status-summary > div { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+.sync-status-summary span { font-size: 12px; color: var(--muted); }
+.sync-status-summary strong { font-size: 17px; color: var(--text); overflow-wrap: anywhere; }
+@media (max-height: 760px) { .catalog-filter-bar { padding: 10px 12px; gap: 8px; } .filter-fields { gap: 6px 10px; } }
+
+/* 全局保持普通光标，只有可编辑文本使用文本光标。 */
+*, *::before, *::after { cursor: default !important; }
+input:not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="submit"]), textarea, [contenteditable="true"], .n-input__input, .n-input__textarea { cursor: text !important; }
+.loadout-icon-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.guide-memory-chips { margin-bottom: 12px; }
+.guide-memory-chip { display: flex; padding: 0 4px 4px 0; border: 0; background: transparent; }
+.guide-card-section > .loadout-icon-row { margin-bottom: 10px; }
+
+/* 来源中的白色技能符号在浅色界面降低亮度，保持浅色底图。 */
+.loadout-item .artwork-resonance img, .loadout-popover .artwork-resonance img { filter: brightness(.5); }
+:root[data-theme="dark"] .loadout-item .artwork-resonance img, :root[data-theme="dark"] .loadout-popover .artwork-resonance img { filter: none; }
+
+/* 矮窗口优先留出内容高度，导航与操作按钮仍可直接访问。 */
+@media (max-height: 760px) {
+  .page-layout { padding-top: 16px; gap: 12px; }
+  .page-heading .eyebrow, .guide-page-header .eyebrow { display: none; }
+  .page-heading > div > p, .guide-page-header > div > p { display: none; }
+  .page-heading h1, .guide-page-header h1 { font-size: 22px; }
+  .sidebar { padding-top: 16px; }
+  .brand { padding-bottom: 16px; flex: none; }
+  .nav-item { min-height: 34px; padding-top: 6px; padding-bottom: 6px; }
+  .sidebar-label { margin-top: 8px; margin-bottom: 5px; }
+}
+
+.detail-aliases { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 9px; font-size: 11px; color: var(--muted); }
+.detail-jump { display: flex; flex-wrap: wrap; gap: 6px; position: sticky; top: 0; z-index: 2; padding: 10px 0; background: var(--app); }
+.detail-jump:empty { display: none; }
+.detail-jump button { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--muted); }
+.detail-jump button:hover { border-color: var(--accent); color: var(--accent-text); }
+.detail-section, #detail-skills { scroll-margin-top: 48px; }

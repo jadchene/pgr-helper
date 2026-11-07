@@ -1,6 +1,6 @@
 import { _electron as electron } from '@playwright/test';
 import assert from 'node:assert/strict';
-import { cp, mkdir, writeFile, stat } from 'node:fs/promises';
+import { cp, mkdir, writeFile, stat, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const project = resolve(import.meta.dirname, '..');
@@ -40,7 +40,7 @@ try {
   page.on('pageerror', (error) => errors.push(error.message));
   await page.getByRole('heading', { name: '首次同步基础资料', exact: true }).waitFor();
   const state = await page.evaluate(() => window.desktop.getState());
-  assert.equal(state.appVersion, '0.1.0');
+  assert.equal(state.appVersion, JSON.parse(await readFile(join(project, 'package.json'), 'utf8')).version);
   assert.equal(state.entries.length, 0);
   assert.deepEqual(state.guides, []);
   assert.equal(await page.title(), '战双助手');

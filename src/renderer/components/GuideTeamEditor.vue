@@ -1,16 +1,44 @@
 <script setup lang="ts">
+import { useCatalogSelectLabel } from '../catalog-select-label';
 import { computed, ref, watch } from 'vue';
 import { NAlert, NButton, NInput, NInputNumber, NSelect, useDialog } from 'naive-ui';
 import { Crown, Flag, Plus, Trash2 } from 'lucide-vue-next';
 import type { EntryView } from '../../shared/types';
 import { createGuideMember, teamPositions, teamPositionLabels, type GuideMember, type GuideTeam, type TeamPosition } from '../../shared/guides';
-import { cloneGuideTeam, guideCatalogChoices, guideOptions, guidePetSkillLabel, memoryResonanceChoices, preserveGuideChoices, swapGuidePosition, weaponResonanceChoices, type GuideChoice } from '../guide-team';
+import { cloneGuideTeam, filterGuideChoices, guideCatalogChoices, guideOptions, guidePetSkillLabel, memoryResonanceChoices, preserveGuideChoices, swapGuidePosition, weaponResonanceChoices, type GuideChoice, type GuideFilters } from '../guide-team';
 import './guide-team.css';
+import PresetImport from './PresetImport.vue';
+import GuideChoiceFilter from './GuideChoiceFilter.vue';
+import type { PresetRecord } from '../../shared/presets';
+import { useGuideSelectMenus } from '../guide-select-menus';
 
-const props = defineProps<{ modelValue: GuideTeam; entries: EntryView[]; disabled?: boolean }>();
+const props = defineProps<{ modelValue: GuideTeam; entries: EntryView[]; disabled?: boolean; presets?: PresetRecord[]; presetMode?: 'character' | 'memory' | 'pet'; memorySetId?: string }>();
+const { renderCatalogLabel } = useCatalogSelectLabel(() => props.entries, value => {
+  const member = props.modelValue.members.find(item => item.id === value);
+  if (member) return props.entries.find(entry => entry.id === member.characterId);
+  const currentPet = props.entries.find(entry => entry.id === active.value?.pet.petId);
+  const skill = currentPet?.sections.find(section => section.skill?.id === value);
+  return currentPet && skill ? { ...currentPet, id: value, name: skill.title, image: skill.skill?.image || '', category: 'resonance' } : undefined;
+});
 const emit = defineEmits<{ 'update:modelValue': [team: GuideTeam] }>();
 const dialog = useDialog();
+const editorRoot = ref<HTMLElement | null>(null);
+/** 直接定位配装分区，避免在长表单中来回寻找。 */
+const jumpToConfig = (section: string): void => {
+  closeSelectMenus();
+  editorRoot.value?.querySelector('[data-config-section="' + section + '"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+};
 const activeId = ref(props.modelValue.members[0]?.id || '');
+const filters = ref({ character: {} as GuideFilters, memory: {} as GuideFilters, weapon: {} as GuideFilters, pet: {} as GuideFilters });
+const memoryResonanceFilters = ref<GuideFilters>({});
+const weaponResonanceFilters = ref<GuideFilters>({});
+const { selectMenu, closeSelectMenus } = useGuideSelectMenus();
+watch([activeId, () => props.disabled], closeSelectMenus);
+watch(() => props.memorySetId, () => {
+  closeSelectMenus();
+  filters.value.memory = {};
+  memoryResonanceFilters.value = {};
+});
 const active = computed(() => props.modelValue.members.find(member => member.id === activeId.value));
 const byId = computed(() => new Map(props.entries.map(entry => [entry.id, entry])));
 const character = computed(() => byId.value.get(active.value?.characterId || ''));
@@ -18,17 +46,17 @@ const weapon = computed(() => byId.value.get(active.value?.weaponId || ''));
 const pet = computed(() => byId.value.get(active.value?.pet.petId || ''));
 const positionOptions = teamPositions.map(position => ({ value: position, label: teamPositionLabels[position] }));
 const roleOptions = computed(() => props.modelValue.members.map(member => ({ value: member.id, label: `${teamPositionLabels[member.position]} · ${byId.value.get(member.characterId)?.name || '未选择机体'}` })));
-const characterOptions = computed(() => guideCatalogChoices(props.entries, 'character', [active.value?.characterId || '']).map(choice => ({ ...choice, disabled: choice.disabled || props.modelValue.members.some(member => member.id !== activeId.value && member.characterId === choice.value) })));
+const characterOptions = computed(() => guideCatalogChoices(props.entries, 'character', [active.value?.characterId || ''], undefined, { facets: filters.value.character }).map(choice => ({ ...choice, disabled: choice.disabled || props.modelValue.members.some(member => member.id !== activeId.value && member.characterId === choice.value) })));
 const evolutionOptions = computed(() => preserveGuideChoices((guideOptions(character.value)?.evolutionStages ?? []).map(stage => ({ value: stage.id, label: stage.label })), [active.value?.evolutionId || '']));
 const currentEvolution = computed(() => guideOptions(character.value)?.evolutionStages?.find(stage => stage.id === active.value?.evolutionId));
 const evolutionEffects = computed(() => character.value?.sections.filter(section => section.skill && currentEvolution.value?.effectSectionIds.includes(section.skill.id)) ?? []);
 const weaponOptions = computed(() => {
   const type = guideOptions(character.value)?.weaponType;
-  return guideCatalogChoices(props.entries, 'weapon', [active.value?.weaponId || ''], entry => type === undefined || guideOptions(entry)?.weaponType === type);
+  return guideCatalogChoices(props.entries, 'weapon', [active.value?.weaponId || ''], entry => type === undefined || guideOptions(entry)?.weaponType === type, { characterId: active.value?.characterId, facets: filters.value.weapon });
 });
 const memoryOptions = computed(() => {
   const type = guideOptions(character.value)?.characterType;
-  return guideCatalogChoices(props.entries, 'memory', active.value?.memories.map(item => item.memoryId) ?? [], entry => !type || !guideOptions(entry)?.characterType || guideOptions(entry)?.characterType === type);
+  return guideCatalogChoices(props.entries, 'memory', active.value?.memories.map(item => item.memoryId) ?? [], entry => !type || !guideOptions(entry)?.characterType || guideOptions(entry)?.characterType === type, { characterId: active.value?.characterId, facets: filters.value.memory });
 });
 const memoryCount = computed(() => active.value?.memories.reduce((sum, allocation) => sum + allocation.count, 0) ?? 0);
 const harmonizationLevels = computed(() => (guideOptions(weapon.value)?.harmonizationLevels ?? []).filter(level => !level.characterIds.length || level.characterIds.includes(active.value?.characterId || '')));
@@ -44,7 +72,7 @@ const harmonizationMemoryOptions = computed(() => guideCatalogChoices(props.entr
   const memoryType = guideOptions(entry)?.characterType;
   return !!currentHarmonization.value?.memoryIds.includes(entry.id) && (!characterType || !memoryType || characterType === memoryType);
 }));
-const petOptions = computed(() => guideCatalogChoices(props.entries, 'pet', [active.value?.pet.petId || '']));
+const petOptions = computed(() => guideCatalogChoices(props.entries, 'pet', [active.value?.pet.petId || ''], undefined, { characterId: active.value?.characterId, facets: filters.value.pet }));
 const petQualities = computed(() => guideOptions(pet.value)?.partnerQualities ?? []);
 const petQualityOptions = computed(() => {
   const result = [{ value: 0, label: '未选择品级', disabled: false }, ...petQualities.value.map(quality => ({ value: quality.quality, label: `${quality.label} · ${quality.passiveSlots} 个被动槽`, disabled: false }))];
@@ -121,7 +149,7 @@ const applyMemoryPreset = (counts: readonly number[]): void => {
   } else apply();
 };
 /** 共鸣数量依据当前意识组合计算，整排六次只开放给六件均可使用的选项。 */
-const resonanceOptions = (side: 'upper' | 'lower'): GuideChoice[] => active.value ? memoryResonanceChoices(active.value, props.entries, side) : [];
+const resonanceOptions = (side: 'upper' | 'lower'): GuideChoice[] => active.value ? filterGuideChoices(memoryResonanceChoices(active.value, props.entries, side), memoryResonanceFilters.value, active.value.memoryResonance[side].map(item => item.resonanceId), props.entries) : [];
 const resonanceTotal = (side: 'upper' | 'lower'): number => active.value?.memoryResonance[side].reduce((sum, allocation) => sum + allocation.count, 0) ?? 0;
 const resonancePresetOptions = (side: 'upper' | 'lower'): GuideChoice[] => resonanceOptions(side).filter(option => !option.disabled && (option.maxCount ?? 0) >= 6);
 /** 快捷选择的动作明确替换该侧六次共鸣，另一侧不受影响。 */
@@ -130,7 +158,7 @@ const applyResonancePreset = (side: 'upper' | 'lower', id: string): void => {
   changeMember(member => { member.memoryResonance[side] = [{ resonanceId: id, count: 6 }]; });
 };
 /** 每个武器槽使用自己的源共鸣池，失效选择仍可见。 */
-const weaponResonanceOptions = (slot: number): GuideChoice[] => active.value ? weaponResonanceChoices(active.value, props.entries, slot) : [];
+const weaponResonanceOptions = (slot: number): GuideChoice[] => active.value ? filterGuideChoices(weaponResonanceChoices(active.value, props.entries, slot), weaponResonanceFilters.value, active.value.weaponResonanceIds, props.entries) : [];
 /** 明确移除武器时同时解除其共鸣和谐振，替换武器时保留原配置供核对。 */
 const selectWeapon = (value: string | null): void => changeMember(member => {
   member.weaponId = value || '';
@@ -152,46 +180,56 @@ const selectPet = (value: string | null): void => changeMember(member => {
 </script>
 
 <template>
-  <section class="guide-team-editor" aria-label="队伍配置编辑">
-    <div class="guide-team-member-tabs" role="group" aria-label="选择队伍成员">
+  <section ref="editorRoot" class="guide-team-editor" aria-label="队伍配置编辑">
+    <div v-if="!presetMode" class="guide-team-member-tabs" role="group" aria-label="选择队伍成员">
       <button v-for="position in teamPositions" :key="position" type="button" :data-position="position" :data-team-member="modelValue.members.find(member => member.position === position)?.id || ''" :class="{ active: active?.position === position }" :disabled="disabled" @click="selectPosition(position)">
         <strong>{{ teamPositionLabels[position] }}</strong><span v-if="modelValue.members.find(member => member.position === position)">{{ byId.get(modelValue.members.find(member => member.position === position)!.characterId)?.name || '选择机体' }}</span><span v-else><Plus :size="13" />添加成员</span>
       </button>
     </div>
-    <div class="guide-team-global-fields">
-      <label class="guide-form-field"><span><Flag :size="14" />首发机体</span><n-select :value="modelValue.starterMemberId || null" :options="roleOptions" :disabled="disabled" placeholder="选择首发机体" aria-label="首发机体" @update:value="value => changeTeam(team => { team.starterMemberId = value || ''; })" /></label>
-      <label class="guide-form-field"><span><Crown :size="14" />队长机体</span><n-select :value="modelValue.captainMemberId || null" :options="roleOptions" :disabled="disabled" placeholder="选择队长机体" aria-label="队长机体" @update:value="value => changeTeam(team => { team.captainMemberId = value || ''; })" /></label>
-      <label class="guide-form-field guide-full-field"><span>队伍效应</span><n-select :value="modelValue.effectIds" :options="effectOptions" multiple filterable clearable :disabled="disabled" placeholder="选择队伍机体提供的效应" aria-label="队伍效应" @update:value="value => changeTeam(team => { team.effectIds = value; })" /><small>选项来自已选机体的效应。</small></label>
+    <div v-if="!presetMode && active" class="guide-quick-swap" aria-label="快速换位">
+      <span>{{ byId.get(active.characterId)?.name || teamPositionLabels[active.position] }} · 换位</span>
+      <n-button v-for="position in teamPositions.filter(value => value !== active!.position)" :key="position" size="small" :disabled="disabled" @click="changePosition(position)">{{ modelValue.members.some(member => member.position === position) ? '与' + teamPositionLabels[position] + '互换' : '移至' + teamPositionLabels[position] }}</n-button>
+    </div>
+    <div v-if="!presetMode" class="guide-team-global-fields">
+      <div class="guide-form-field"><span><Flag :size="14" />首发机体</span><n-select v-bind="selectMenu('starter')" :value="modelValue.starterMemberId || null" :options="roleOptions" :render-label="renderCatalogLabel" :disabled="disabled" placeholder="选择首发机体" aria-label="首发机体" @update:value="value => changeTeam(team => { team.starterMemberId = value || ''; })" /></div>
+      <div class="guide-form-field"><span><Crown :size="14" />队长机体</span><n-select v-bind="selectMenu('captain')" :value="modelValue.captainMemberId || null" :options="roleOptions" :render-label="renderCatalogLabel" :disabled="disabled" placeholder="选择队长机体" aria-label="队长机体" @update:value="value => changeTeam(team => { team.captainMemberId = value || ''; })" /></div>
+      <div class="guide-form-field guide-full-field"><span>队伍效应</span><n-select :input-props="{ 'aria-label': '队伍效应' }" v-bind="selectMenu('effects')" :value="modelValue.effectIds" :options="effectOptions" :render-label="renderCatalogLabel" multiple filterable clearable :disabled="disabled" placeholder="选择队伍机体提供的效应" aria-label="队伍效应" @update:value="value => changeTeam(team => { team.effectIds = value; })" /><small>选项来自已选机体的效应。</small></div>
     </div>
     <div v-if="!active" class="guide-team-empty"><p>点击一个站位添加成员，再选择机体和装备。</p></div>
     <div v-else class="guide-member-editor" :data-active-member="active.id">
-      <header class="guide-member-editor-heading"><h3>{{ teamPositionLabels[active.position] }}配置</h3><n-button quaternary size="small" type="error" :disabled="disabled" @click="removeMember"><template #icon><Trash2 :size="14" /></template>移除成员</n-button></header>
-      <section class="guide-config-section">
+      <header v-if="!presetMode" class="guide-member-editor-heading"><h3>{{ teamPositionLabels[active.position] }}配置</h3><n-button quaternary size="small" type="error" :disabled="disabled" @click="removeMember"><template #icon><Trash2 :size="14" /></template>移除成员</n-button></header>
+      <nav class="guide-config-jump" aria-label="配装分区"><button v-if="!presetMode || presetMode === 'character'" type="button" @click="jumpToConfig('character')">机体培养</button><button v-if="presetMode !== 'pet'" type="button" @click="jumpToConfig('memory')">意识搭配</button><button v-if="!presetMode || presetMode === 'character'" type="button" @click="jumpToConfig('weapon')">武器与共鸣</button><button v-if="presetMode !== 'memory'" type="button" @click="jumpToConfig('pet')">辅助机</button></nav>
+      <PresetImport v-if="!presetMode" :team="modelValue" :member="active" :presets="presets || []" :entries="entries" :disabled="disabled" @apply="value => changeMember(member => Object.assign(member, value))" />
+      <section v-if="!presetMode || presetMode === 'character'" class="guide-config-section" data-config-section="character">
         <h4>机体与进化</h4>
+        <GuideChoiceFilter v-if="!presetMode" v-model="filters.character" :entries="entries" category="character" label="机体" :disabled="disabled" />
         <div class="guide-config-grid">
-          <label class="guide-form-field"><span>机体</span><n-select :value="active.characterId || null" :options="characterOptions" filterable :disabled="disabled" placeholder="搜索并选择机体" aria-label="配置机体" @update:value="value => changeMember(member => { member.characterId = value || ''; })" /></label>
-          <label class="guide-form-field"><span>进化品级与阶段</span><n-select :value="active.evolutionId || null" :options="evolutionOptions" filterable :disabled="disabled || !active.characterId" placeholder="例如 SSS、SSS3" aria-label="进化品级与阶段" @update:value="value => changeMember(member => { member.evolutionId = value || ''; })" /><small>记录实际进化阶段，不使用图鉴初始品级。</small></label>
-          <label class="guide-form-field"><span>站位</span><n-select :value="active.position" :options="positionOptions" :disabled="disabled" aria-label="机体站位" @update:value="changePosition" /><small>选择已占用的位置会交换两名成员的站位。</small></label>
+          <div v-if="!presetMode" class="guide-form-field"><span>机体</span><n-select :input-props="{ 'aria-label': '配置机体' }" v-bind="selectMenu('character')" :value="active.characterId || null" :options="characterOptions" :render-label="renderCatalogLabel" filterable :disabled="disabled" placeholder="搜索并选择机体" aria-label="配置机体" @update:value="value => changeMember(member => { member.characterId = value || ''; })" /></div>
+          <div class="guide-form-field"><span>进化品级与阶段</span><n-select :input-props="{ 'aria-label': '进化品级与阶段' }" v-bind="selectMenu('evolution')" :value="active.evolutionId || null" :options="evolutionOptions" filterable :disabled="disabled || !active.characterId" placeholder="例如 SSS、SSS3" aria-label="进化品级与阶段" @update:value="value => changeMember(member => { member.evolutionId = value || ''; })" /><small>记录实际进化阶段，不使用图鉴初始品级。</small></div>
+          <div v-if="!presetMode" class="guide-form-field"><span>站位</span><n-select v-bind="selectMenu('position')" :value="active.position" :options="positionOptions" :disabled="disabled" aria-label="机体站位" @update:value="changePosition" /><small>选择已占用的位置会交换两名成员的站位。</small></div>
         </div>
         <n-alert v-if="active.characterId && !guideOptions(character)?.evolutionStages?.length" type="warning" :bordered="false">当前机体缺少培养选项，请先同步基础资料。</n-alert>
         <details v-if="evolutionEffects.length" class="guide-effect-details"><summary>查看 {{ currentEvolution?.label }} 阶段新增效果</summary><div v-for="section in evolutionEffects" :key="section.skill?.id"><strong>{{ section.title }}</strong><p>{{ section.body }}</p></div></details>
       </section>
-      <section class="guide-config-section">
+      <section v-if="presetMode !== 'pet'" class="guide-config-section" data-config-section="memory">
         <div class="guide-section-heading"><h4>意识搭配 <small>{{ memoryCount }} / 6 件</small></h4><div class="guide-preset-buttons"><span>快捷搭配</span><n-button v-for="counts in [[4, 2], [2, 2, 2], [6]]" :key="counts.join('-')" size="small" :disabled="disabled" @click="applyMemoryPreset(counts)">{{ counts.join(' + ') }}</n-button></div></div>
-        <p class="guide-config-help">这里配置基础六件；谐振增加的套装计数在武器区单独设置。</p>
+        <slot name="memory-plans" />
+        <p class="guide-config-help">这里配置基础六件；{{ presetMode ? '谐振意识在下方单独设置。' : '谐振增加的套装计数在武器区单独设置。' }}</p>
+        <GuideChoiceFilter v-model="filters.memory" :entries="entries" category="memory" label="意识" :disabled="disabled" />
         <div v-for="(allocation, index) in active.memories" :key="index" class="guide-allocation-row">
-          <n-select :value="allocation.memoryId || null" :options="memoryOptions" filterable :disabled="disabled" placeholder="选择意识套装" :aria-label="`第${index + 1}组意识套装`" @update:value="value => changeMember(member => { member.memories[index].memoryId = value || ''; })" />
+          <n-select :input-props="{ 'aria-label': `第${index + 1}组意识套装` }" v-bind="selectMenu(`memory-${index}`)" :value="allocation.memoryId || null" :options="memoryOptions" :render-label="renderCatalogLabel" filterable :disabled="disabled" placeholder="选择意识套装" :aria-label="`第${index + 1}组意识套装`" @update:value="value => changeMember(member => { member.memories[index].memoryId = value || ''; })" />
           <n-input-number :value="allocation.count" :min="1" :max="6" :precision="0" :disabled="disabled" :aria-label="`第${index + 1}组意识件数`" @update:value="value => changeMember(member => { member.memories[index].count = value ?? 1; })"><template #suffix>件</template></n-input-number>
           <n-button quaternary circle type="error" :disabled="disabled" :aria-label="`移除第${index + 1}组意识`" @click="changeMember(member => { member.memories.splice(index, 1); })"><template #icon><Trash2 :size="15" /></template></n-button>
         </div>
         <n-button size="small" dashed :disabled="disabled || active.memories.length >= 6" @click="changeMember(member => { member.memories.push({ memoryId: '', count: 1 }); })"><template #icon><Plus :size="14" /></template>添加意识组合</n-button>
         <n-alert v-if="memoryCount && memoryCount !== 6" :type="memoryCount > 6 ? 'error' : 'warning'" :bordered="false" class="guide-inline-alert">基础意识需合计 6 件，目前为 {{ memoryCount }} 件。</n-alert>
-        <div class="guide-resonance-sides">
+        <GuideChoiceFilter v-if="!presetMode || presetMode === 'character'" v-model="memoryResonanceFilters" :entries="entries" category="resonance" label="意识共鸣" :disabled="disabled" />
+        <div v-if="!presetMode || presetMode === 'character'" class="guide-resonance-sides">
           <section v-for="side in (['upper', 'lower'] as const)" :key="side" class="guide-resonance-side" :data-resonance-side="side">
             <h5>{{ side === 'upper' ? '上位' : '下位' }}共鸣 <span>{{ resonanceTotal(side) }} / 6</span></h5>
-            <n-select :value="null" :options="resonancePresetOptions(side)" filterable :disabled="disabled || !resonancePresetOptions(side).length" :placeholder="`快捷：6 个相同${side === 'upper' ? '上位' : '下位'}共鸣`" :aria-label="`${side === 'upper' ? '上位' : '下位'}共鸣六次快捷`" @update:value="value => applyResonancePreset(side, value)" />
+            <n-select :input-props="{ 'aria-label': `${side === 'upper' ? '上位' : '下位'}共鸣六次快捷` }" v-bind="selectMenu(`preset-${side}`)" :value="null" :options="resonancePresetOptions(side)" :render-label="renderCatalogLabel" filterable :disabled="disabled || !resonancePresetOptions(side).length" :placeholder="`快捷：6 个相同${side === 'upper' ? '上位' : '下位'}共鸣`" :aria-label="`${side === 'upper' ? '上位' : '下位'}共鸣六次快捷`" @update:value="value => applyResonancePreset(side, value)" />
             <div v-for="(allocation, index) in active.memoryResonance[side]" :key="index" class="guide-allocation-row">
-              <n-select :value="allocation.resonanceId || null" :options="resonanceOptions(side)" filterable :disabled="disabled" placeholder="选择共鸣" :aria-label="`${side === 'upper' ? '上位' : '下位'}第${index + 1}种共鸣`" @update:value="value => changeMember(member => { member.memoryResonance[side][index].resonanceId = value || ''; })" />
+              <n-select :input-props="{ 'aria-label': `${side === 'upper' ? '上位' : '下位'}第${index + 1}种共鸣` }" v-bind="selectMenu(`resonance-${side}-${index}`)" :value="allocation.resonanceId || null" :options="resonanceOptions(side)" :render-label="renderCatalogLabel" filterable :disabled="disabled" placeholder="选择共鸣" :aria-label="`${side === 'upper' ? '上位' : '下位'}第${index + 1}种共鸣`" @update:value="value => changeMember(member => { member.memoryResonance[side][index].resonanceId = value || ''; })" />
               <n-input-number :value="allocation.count" :min="1" :max="6" :precision="0" :disabled="disabled" :aria-label="`${side === 'upper' ? '上位' : '下位'}第${index + 1}种共鸣数量`" @update:value="value => changeMember(member => { member.memoryResonance[side][index].count = value ?? 1; })" />
               <n-button quaternary circle type="error" :disabled="disabled" :aria-label="`移除${side === 'upper' ? '上位' : '下位'}第${index + 1}种共鸣`" @click="changeMember(member => { member.memoryResonance[side].splice(index, 1); })"><template #icon><Trash2 :size="14" /></template></n-button>
             </div>
@@ -199,33 +237,37 @@ const selectPet = (value: string | null): void => changeMember(member => {
             <p v-if="resonanceTotal(side) > 6" class="guide-config-error">这一侧最多配置 6 次共鸣。</p>
           </section>
         </div>
+        <div v-if="presetMode === 'character' && active.harmonization.level" class="guide-form-field"><span>本方案谐振意识<template v-if="currentHarmonization"> · 额外 {{ currentHarmonization.bonusPieces }} 件</template></span><n-select :input-props="{ 'aria-label': '谐振绑定意识' }" v-bind="selectMenu('harmonization-memory')" :value="active.harmonization.memoryId || null" :options="harmonizationMemoryOptions" :render-label="renderCatalogLabel" filterable :disabled="disabled" placeholder="选择本方案的谐振绑定意识" aria-label="谐振绑定意识" @update:value="value => changeMember(member => { member.harmonization.memoryId = value || ''; })" /></div>
       </section>
-      <section class="guide-config-section">
+      <section v-if="!presetMode || presetMode === 'character'" class="guide-config-section" data-config-section="weapon">
         <h4>武器、共鸣与谐振</h4>
-        <label class="guide-form-field"><span>武器</span><n-select :value="active.weaponId || null" :options="weaponOptions" filterable clearable :disabled="disabled" placeholder="选择可装备武器" aria-label="配置武器" @update:value="selectWeapon" /></label>
+        <GuideChoiceFilter v-model="filters.weapon" :entries="entries" category="weapon" label="武器" :disabled="disabled" />
+        <div class="guide-form-field"><span>武器</span><n-select :input-props="{ 'aria-label': '配置武器' }" v-bind="selectMenu('weapon')" :value="active.weaponId || null" :options="weaponOptions" :render-label="renderCatalogLabel" filterable clearable :disabled="disabled" placeholder="选择可装备武器" aria-label="配置武器" @update:value="selectWeapon" /></div>
+        <GuideChoiceFilter v-model="weaponResonanceFilters" :entries="entries" category="resonance" label="武器共鸣" :disabled="disabled" />
         <div class="guide-weapon-resonance-editor">
-          <label v-for="slot in 3" :key="slot" class="guide-form-field"><span>武器共鸣 {{ slot }}</span><n-select :value="active.weaponResonanceIds[slot - 1] || null" :options="weaponResonanceOptions(slot)" filterable clearable :disabled="disabled || !active.weaponId" placeholder="未配置" :aria-label="`武器共鸣${slot}`" @update:value="value => changeMember(member => { member.weaponResonanceIds[slot - 1] = value || ''; })" /></label>
+          <div v-for="slot in 3" :key="slot" class="guide-form-field"><span>武器共鸣 {{ slot }}</span><n-select :input-props="{ 'aria-label': `武器共鸣${slot}` }" v-bind="selectMenu(`weapon-resonance-${slot}`)" :value="active.weaponResonanceIds[slot - 1] || null" :options="weaponResonanceOptions(slot)" :render-label="renderCatalogLabel" filterable clearable :disabled="disabled || !active.weaponId" placeholder="未配置" :aria-label="`武器共鸣${slot}`" @update:value="value => changeMember(member => { member.weaponResonanceIds[slot - 1] = value || ''; })" /></div>
         </div>
         <div class="guide-config-grid">
-          <label class="guide-form-field"><span>谐振阶段</span><n-select :value="active.harmonization.level" :options="harmonizationOptions" :disabled="disabled || !active.weaponId" aria-label="武器谐振阶段" @update:value="selectHarmonization" /></label>
-          <label v-if="active.harmonization.level" class="guide-form-field"><span>谐振意识<template v-if="currentHarmonization"> · 额外 {{ currentHarmonization.bonusPieces }} 件</template></span><n-select :value="active.harmonization.memoryId || null" :options="harmonizationMemoryOptions" filterable :disabled="disabled" placeholder="选择谐振绑定意识" aria-label="谐振绑定意识" @update:value="value => changeMember(member => { member.harmonization.memoryId = value || ''; })" /></label>
+          <div class="guide-form-field"><span>谐振阶段</span><n-select v-bind="selectMenu('harmonization')" :value="active.harmonization.level" :options="harmonizationOptions" :disabled="disabled || !active.weaponId" aria-label="武器谐振阶段" @update:value="selectHarmonization" /></div>
+          <div v-if="!presetMode && active.harmonization.level" class="guide-form-field"><span>谐振意识<template v-if="currentHarmonization"> · 额外 {{ currentHarmonization.bonusPieces }} 件</template></span><n-select :input-props="{ 'aria-label': '谐振绑定意识' }" v-bind="selectMenu('harmonization-memory')" :value="active.harmonization.memoryId || null" :options="harmonizationMemoryOptions" :render-label="renderCatalogLabel" filterable :disabled="disabled" placeholder="选择谐振绑定意识" aria-label="谐振绑定意识" @update:value="value => changeMember(member => { member.harmonization.memoryId = value || ''; })" /></div>
         </div>
         <details v-if="currentHarmonization?.description" class="guide-effect-details"><summary>查看本阶段新增效果</summary><p>{{ currentHarmonization.description }}</p></details>
       </section>
-      <section class="guide-config-section">
+      <section v-if="presetMode !== 'memory'" class="guide-config-section" data-config-section="pet">
         <h4>辅助机与携带技能</h4>
+        <GuideChoiceFilter v-model="filters.pet" :entries="entries" category="pet" label="辅助机" :disabled="disabled" />
         <div class="guide-config-grid">
-          <label class="guide-form-field"><span>辅助机</span><n-select :value="active.pet.petId || null" :options="petOptions" filterable clearable :disabled="disabled" placeholder="选择辅助机" aria-label="配置辅助机" @update:value="selectPet" /></label>
-          <label class="guide-form-field"><span>辅助机品级</span><n-select :value="active.pet.quality" :options="petQualityOptions" :disabled="disabled || !active.pet.petId" aria-label="辅助机品级" @update:value="value => changeMember(member => { member.pet.quality = value; })" /></label>
+          <div class="guide-form-field"><span>辅助机</span><n-select :input-props="{ 'aria-label': '配置辅助机' }" v-bind="selectMenu('pet')" :value="active.pet.petId || null" :options="petOptions" :render-label="renderCatalogLabel" filterable clearable :disabled="disabled" placeholder="选择辅助机" aria-label="配置辅助机" @update:value="selectPet" /></div>
+          <div class="guide-form-field"><span>辅助机品级</span><n-select v-bind="selectMenu('pet-quality')" :value="active.pet.quality" :options="petQualityOptions" :disabled="disabled || !active.pet.petId" aria-label="辅助机品级" @update:value="value => changeMember(member => { member.pet.quality = value; })" /></div>
         </div>
         <template v-if="active.pet.petId">
-          <label class="guide-form-field"><span>携带主动技能 · 1 个</span><n-select :value="active.pet.activeSkillId || null" :options="activeSkillOptions" filterable clearable :disabled="disabled" placeholder="选择主动技能及属性版本" aria-label="辅助机主动技能" @update:value="value => changeMember(member => { member.pet.activeSkillId = value || ''; })" /></label>
-          <label class="guide-form-field"><span>携带被动技能 · {{ active.pet.passiveSkillIds.length }} / {{ passiveSlots }}</span><n-select :value="active.pet.passiveSkillIds" :options="passiveSkillOptions" multiple filterable clearable :disabled="disabled" placeholder="按辅助机品级选择被动技能" aria-label="辅助机被动技能" @update:value="value => changeMember(member => { member.pet.passiveSkillIds = value; })" /></label>
+          <div class="guide-form-field"><span>携带主动技能 · 1 个</span><n-select :input-props="{ 'aria-label': '辅助机主动技能' }" v-bind="selectMenu('pet-active')" :value="active.pet.activeSkillId || null" :options="activeSkillOptions" :render-label="renderCatalogLabel" filterable clearable :disabled="disabled" placeholder="选择主动技能及属性版本" aria-label="辅助机主动技能" @update:value="value => changeMember(member => { member.pet.activeSkillId = value || ''; })" /></div>
+          <div class="guide-form-field"><span>携带被动技能 · {{ active.pet.passiveSkillIds.length }} / {{ passiveSlots }}</span><n-select :input-props="{ 'aria-label': '辅助机被动技能' }" v-bind="selectMenu('pet-passive')" :value="active.pet.passiveSkillIds" :options="passiveSkillOptions" :render-label="renderCatalogLabel" multiple filterable clearable :disabled="disabled" placeholder="按辅助机品级选择被动技能" aria-label="辅助机被动技能" @update:value="value => changeMember(member => { member.pet.passiveSkillIds = value; })" /></div>
           <n-alert v-if="active.pet.passiveSkillIds.length > passiveSlots" type="error" :bordered="false">当前品级最多携带 {{ passiveSlots }} 个被动技能。原选择已保留，请移除超出的技能。</n-alert>
           <details v-if="selectedPetSkills.length" class="guide-effect-details"><summary>查看已携带技能说明</summary><div v-for="skill in selectedPetSkills" :key="skill.id"><strong>{{ skill.label }}</strong><p>{{ skill.body || '原技能说明暂不可用，请重新选择。' }}</p></div></details>
         </template>
       </section>
-      <label class="guide-form-field"><span>成员配置备注</span><n-input :value="active.notes" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" :disabled="disabled" placeholder="记录培养、替代搭配或使用条件" aria-label="成员配置备注" @update:value="value => changeMember(member => { member.notes = value; })" /></label>
+      <label v-if="!presetMode" class="guide-form-field"><span>成员配置备注</span><n-input :value="active.notes" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" :disabled="disabled" placeholder="记录培养、替代搭配或使用条件" aria-label="成员配置备注" @update:value="value => changeMember(member => { member.notes = value; })" /></label>
     </div>
   </section>
 </template>

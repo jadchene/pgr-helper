@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CatalogEntry, EntryView } from '../src/shared/types';
 import { createGuideMember, type GuideTeam } from '../src/shared/guides';
-import { guideCatalogChoices, guideEvolutionLabel, guideMemorySummary, guidePetSkillLabel, guideResonanceLabel, memoryResonanceChoices, orderedGuideMembers, swapGuidePosition, weaponResonanceChoices } from '../src/renderer/guide-team';
+import { guideCatalogChoices, guideEvolutionLabel, guideMemorySummary, guidePetSkillLabel, guideResonanceLabel, matchesGuideFilters, memoryResonanceChoices, orderedGuideMembers, swapGuidePosition, weaponResonanceChoices } from '../src/renderer/guide-team';
 
 /** 构造只包含本次配置语义的独立资料。 */
 const entry = (id: string, changes: Partial<CatalogEntry> = {}): CatalogEntry => ({
@@ -12,6 +12,32 @@ const entry = (id: string, changes: Partial<CatalogEntry> = {}): CatalogEntry =>
 const view = (value: CatalogEntry, changes: Partial<EntryView> = {}): EntryView => ({ ...value, origin: 'source', modified: false, hidden: false, retired: false, updatedAt: '', ...changes });
 
 describe('攻略队伍配置与一图流', () => {
+  it('优先关联装备，其次同属性，再按来源新旧排列；标签过滤保留有效已选项', () => {
+    const character = view(entry('character:dark', { category: 'character', element: '暗', relatedIds: ['memory:dedicated'] }));
+    const make = (id: string, order: number, tags: string[] = []) => view(entry(id, { tags, catalog: { order: [order], basis: 'source-priority', facets: { purpose: tags } } }));
+    const entries = [character, make('memory:generic', 100), make('memory:dark-old', 30, ['暗']), make('memory:dedicated', 10), make('memory:dark-new', 40, ['暗'])];
+    const options = guideCatalogChoices(entries, 'memory', [], undefined, { characterId: character.id });
+    expect(options.map(item => item.value)).toEqual(['memory:dedicated', 'memory:dark-new', 'memory:dark-old', 'memory:generic']);
+    const filtered = guideCatalogChoices(entries, 'memory', ['memory:generic'], undefined, { characterId: character.id, facets: { purpose: '暗' } });
+    expect(filtered.map(item => item.value)).toEqual(['memory:dark-new', 'memory:dark-old', 'memory:generic']);
+    expect(filtered.every(item => !item.disabled)).toBe(true);
+  });
+  it('属性、职业、品级等条件独立匹配，不混用标签，同字段清空后解除限制', () => {
+    const value = entry('character:1', { category: 'character', element: '暗', profession: '进攻型', rarity: 'S', tags: ['辅助型'], catalog: { order: [1], basis: 'source-priority', facets: { frameType: ['泛用机体'], effect: ['观测者'] } } });
+    expect(matchesGuideFilters(value, { element: '暗', profession: '进攻型', rarity: 'S', frameType: '泛用机体' })).toBe(true);
+    expect(matchesGuideFilters(value, { profession: '辅助型' })).toBe(false);
+    expect(matchesGuideFilters(value, { element: '观测者' })).toBe(false);
+    expect(matchesGuideFilters(value, { element: null, effect: '观测者' })).toBe(true);
+    expect(matchesGuideFilters(value, {})).toBe(true);
+  });
+  it('下拉沿用图鉴来源倒序，不被名称或输入顺序覆盖，失效选择仍保留', () => {
+    const older = view(entry('character:older', { category: 'character', name: 'A旧机体', catalog: { order: [10], basis: 'source-priority', facets: {} } }));
+    const newer = view(entry('character:newer', { category: 'character', name: 'Z新机体', catalog: { order: [100], basis: 'source-priority', facets: {} } }));
+    const source = [older, newer];
+    expect(guideCatalogChoices(source, 'character', ['character:missing']).map(choice => choice.value)).toEqual(['character:newer', 'character:older', 'character:missing']);
+    expect(source.map(item => item.id)).toEqual(['character:older', 'character:newer']);
+  });
+
   it('交换站位不改变成员ID、首发、队长和原对象', () => {
     const blue = { ...createGuideMember('blue', 'member-blue'), characterId: 'character:1', notes: '保留配置' };
     const red = { ...createGuideMember('red', 'member-red'), characterId: 'character:2' };
@@ -77,6 +103,8 @@ describe('攻略队伍配置与一图流', () => {
   it('辅助机携带技能只显示名称与属性，不把源最高等级当作玩家等级', () => {
     const pet = entry('pet:1', { category: 'pet', sections: [{ title: '源技能名称', body: '独立版本效果', skill: { kind: 'pet-active', id: 'variant-ice', groupId: 'active', groupName: '主动技能', groupOrder: 1, familyId: 'family', familyName: '主动技能 1', typeName: '主动', level: 5, element: { id: 3, name: '冰' } } }] });
     expect(guidePetSkillLabel(pet, 'variant-ice')).toBe('源技能名称 · 冰');
+    const titled = { ...pet, sections: pet.sections.map(section => ({ ...section, title: `${section.title}·冰` })) };
+    expect(guidePetSkillLabel(titled, 'variant-ice')).toBe('源技能名称·冰');
     expect(guidePetSkillLabel(pet, 'missing')).toBe('原技能暂不可用');
   });
 

@@ -1,3 +1,6 @@
+import { presetSchema, presetRecordSchema } from './preset-schema';
+import { validatePreset } from '../shared/preset-validation';
+import type { PresetDocument, PresetRecord } from '../shared/presets';
 import type { DatabaseSync as SqliteDatabase } from 'node:sqlite';
 import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -55,6 +58,7 @@ const backupSchema = z.object({
   overrides: z.array(z.object({ id: z.string(), patch: patchSchema, hidden: z.boolean(), updatedAt: z.iso.datetime() })).max(50_000),
   localEntries: z.array(z.object({ entry: entrySchema, hidden: z.boolean(), updatedAt: z.iso.datetime() })).max(50_000),
   guides: z.array(guideRecordSchema).max(10_000),
+  presets: z.array(presetRecordSchema).max(10_000),
 }).strict();
 
 /** SQLite 资料仓库。源资料与用户改动分层，切换版本不会覆盖用户改动。 @author chenjd @created 2026-11-06 13:30:00 */
@@ -86,6 +90,7 @@ export class CatalogStore {
       CREATE TABLE IF NOT EXISTS guides (id TEXT PRIMARY KEY, payload TEXT NOT NULL, hidden INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL);
       PRAGMA user_version=1;
     `);
+    this.db.exec('CREATE TABLE IF NOT EXISTS presets (id TEXT PRIMARY KEY, payload TEXT NOT NULL, hidden INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL);');
     const storedSettings = this.getMeta('settings');
     if (storedSettings === null) this.setMeta('settings', defaultSettings);
     else if (!settingsSchema.safeParse(storedSettings).success) {
@@ -150,7 +155,40 @@ export class CatalogStore {
   /** 返回应用需要的完整本地状态。 */
   getState = (appVersion = '0.1.0'): AppState => {
     const versions = this.listVersions();
-    return { appVersion, dataDirectory: this.directory, settings: this.getSettings(), entries: this.listEntries(), guides: this.listGuides(), versions, currentVersion: versions.find((version) => version.id === this.getMeta('currentVersion')) ?? null };
+    return { appVersion, dataDirectory: this.directory, settings: this.getSettings(), entries: this.listEntries(), guides: this.listGuides(), presets: this.listPresets(), versions, currentVersion: versions.find((version) => version.id === this.getMeta('currentVersion')) ?? null };
+  };
+
+
+  /** 读取独立预设，资料版本切换不覆盖用户配置。 */
+  listPresets = (): PresetRecord[] => this.db.prepare('SELECT * FROM presets ORDER BY updated_at DESC,id').all().map(row => ({
+    ...JSON.parse(String(row.payload)) as PresetDocument, hidden: !!row.hidden, createdAt: String(row.created_at), updatedAt: String(row.updated_at), revision: Number(row.revision),
+  }));
+  /** 校验并保存预设，使用修订号防止旧编辑覆盖新内容。 */
+  savePreset = (input: PresetDocument, revision: number | null): PresetRecord => {
+    const preset = presetSchema.parse(input);
+    const issues = validatePreset(preset, this.listEntries());
+    if (issues.length) throw new Error(issues.join('\n'));
+    if (revision !== null && (!Number.isSafeInteger(revision) || revision < 1)) throw new Error('预设修订号无效');
+    this.transaction(() => {
+      if (preset.kind === 'character' && this.db.prepare("SELECT id FROM presets WHERE json_extract(payload,'$.kind')='character' AND json_extract(payload,'$.characterId')=? AND id<>?").get(preset.characterId, preset.id)) throw new Error('该机体已有配置，请从机体列表打开编辑。');
+      const existing = this.db.prepare('SELECT revision,hidden FROM presets WHERE id=?').get(preset.id);
+      const now = new Date().toISOString();
+      if (existing) {
+        if (existing.hidden || Number(existing.revision) !== revision) throw new Error('预设已更新或位于回收站，请重新打开。');
+        this.db.prepare('UPDATE presets SET payload=?,updated_at=?,revision=revision+1 WHERE id=?').run(JSON.stringify(preset), now, preset.id);
+      } else {
+        if (revision !== null) throw new Error('预设不存在，请刷新列表。');
+        this.db.prepare('INSERT INTO presets VALUES (?,?,0,?,?,1)').run(preset.id, JSON.stringify(preset), now, now);
+      }
+    });
+    return this.listPresets().find(item => item.id === preset.id)!;
+  };
+  /** 预设可恢复删除，校验修订避免并发覆盖。 */
+  setPresetHidden = (id: string, hidden: boolean, revision: number): PresetRecord => {
+    if (typeof hidden !== 'boolean' || !Number.isSafeInteger(revision) || revision < 1) throw new Error('预设操作参数无效');
+    const result = this.db.prepare('UPDATE presets SET hidden=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?').run(Number(hidden), new Date().toISOString(), id, revision);
+    if (!result.changes) throw new Error('预设已更新或不存在，请刷新。');
+    return this.listPresets().find(item => item.id === id)!;
   };
 
   /** 攻略独立于来源版本保存，按最近修改时间排列。 */
@@ -331,7 +369,7 @@ export class CatalogStore {
       sourceEntries: this.db.prepare('SELECT * FROM source_entries').all().map((row) => ({ entry: JSON.parse(String(row.payload)), retired: !!row.retired, updatedAt: row.updated_at })),
       overrides: this.db.prepare('SELECT * FROM overrides').all().map((row) => ({ id: row.id, patch: JSON.parse(String(row.patch)), hidden: !!row.hidden, updatedAt: row.updated_at })),
       localEntries: this.db.prepare('SELECT * FROM local_entries').all().map((row) => ({ entry: JSON.parse(String(row.payload)), hidden: !!row.hidden, updatedAt: row.updated_at })),
-      guides: this.listGuides(),
+      guides: this.listGuides(), presets: this.listPresets(),
     };
     writeFileSync(path, JSON.stringify(backup), { encoding: 'utf8', flag: 'wx' });
   };
@@ -340,6 +378,7 @@ export class CatalogStore {
   importBackup = (path: string): void => {
     const backup = backupSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
     if (new Set(backup.guides.map(guide => guide.id)).size !== backup.guides.length) throw new Error('备份存在重复攻略');
+    if (new Set(backup.presets.map(item => item.id)).size !== backup.presets.length) throw new Error('备份存在重复预设');
     for (const guide of backup.guides) {
       const members = guide.team.members;
       const memberIds = new Set(members.map(member => member.id));
@@ -365,6 +404,11 @@ export class CatalogStore {
     this.transaction(() => {
       this.db.exec('DELETE FROM overrides; DELETE FROM local_entries; DELETE FROM source_entries; DELETE FROM versions;');
       this.db.exec('DELETE FROM guides;');
+      this.db.exec('DELETE FROM presets;');
+      for (const record of backup.presets) {
+        const { hidden, createdAt, updatedAt, revision, ...preset } = record;
+        this.db.prepare('INSERT INTO presets VALUES (?,?,?,?,?,?)').run(preset.id, JSON.stringify(preset), Number(hidden), createdAt, updatedAt, revision);
+      }
       let currentId: number | null = null;
       for (const [index, item] of backup.versions.entries()) {
         const snapshot = item.snapshot;

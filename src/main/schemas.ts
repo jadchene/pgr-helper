@@ -15,6 +15,7 @@ export const catalogMetadataSchema = z.object({
 }).strict();
 /** 验证技能源分组及属性版本，使编辑和备份完整保留结构。 */
 export const skillSectionMetadataSchema = z.object({
+  iconResource: text(1000).optional(), image: image.optional(),
   kind: z.enum(['character', 'pet-active', 'pet-passive']), id: text(180).min(1),
   groupId: text(180).min(1), groupName: text(200).min(1), groupOrder: z.number().int().min(0).max(100_000),
   familyId: text(180).min(1), familyName: text(200).min(1), typeName: text(200).min(1),

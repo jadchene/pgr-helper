@@ -64,7 +64,7 @@ describe('攻略格式边界', () => {
   });
 });
 
-describe.skipIf(!repository || !existsSync(repository))('真实资料的完整攻略语义', () => {
+describe.skipIf(!(process.env.PGR_TEST_CATALOG && existsSync(process.env.PGR_TEST_CATALOG)) && (!repository || !existsSync(repository)))('真实资料的完整攻略语义', () => {
   beforeAll(async () => {
     snapshot = await loadGuideSnapshot(repository!);
     guide = buildGuideFixture(snapshot.entries);

@@ -62,7 +62,7 @@
   margin-bottom: 14px;
 }
 .flow-validation summary {
-  cursor: pointer;
+  cursor: default;
 }
 .flow-validation ul {
   margin: 10px 0 0;
@@ -103,7 +103,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--subtle);
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
 }
 .flow-view-canvas:focus-visible {
   outline: 2px solid var(--accent);
@@ -122,6 +122,16 @@
 }
 .flow-path.looping {
   padding-left: 28px;
+}
+.flow-startup-section {
+  min-width: 280px;
+  margin-bottom: 28px;
+}
+.flow-startup-section > h4 {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
 }
 .flow-endpoint {
   position: relative;
@@ -144,23 +154,23 @@
   overflow-wrap: anywhere;
 }
 .flow-start {
-  margin-bottom: 28px;
+  margin-bottom: 18px;
 }
 .flow-end {
-  margin-top: 28px;
+  margin-top: 18px;
 }
 .flow-start::after,
-.flow-step:not(:last-child)::after,
+.flow-row:not(:last-child)::after,
 .flow-end::before {
   content: '';
   position: absolute;
   left: 50%;
   width: 1px;
-  height: 23px;
+  height: 13px;
   background: var(--border);
 }
 .flow-start::after,
-.flow-step:not(:last-child)::after {
+.flow-row:not(:last-child)::after {
   top: 100%;
 }
 .flow-end::before {
@@ -169,7 +179,7 @@
 .flow-sequence {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 18px;
 }
 .flow-step {
   position: relative;
@@ -181,10 +191,10 @@
 .flow-node-card {
   position: relative;
   display: block;
-  width: 100%;
-  min-width: 240px;
-  max-width: 520px;
-  padding: 13px 15px;
+  width: 300px;
+  min-width: 300px;
+  max-width: 300px;
+  padding: 9px 11px;
   border: 1px solid var(--border);
   border-radius: 9px;
   color: var(--text);
@@ -224,7 +234,7 @@ button.flow-node-card:hover {
 .flow-node-top strong {
   overflow-wrap: anywhere;
   flex: 1;
-  min-width: 110px;
+  min-width: 0;
 }
 .flow-node-number {
   color: var(--faint);
@@ -238,27 +248,15 @@ button.flow-node-card:hover {
 .flow-action-icon[data-skill="red"] { color: #dc4d53; }
 .flow-action-icon[data-skill="yellow"] { color: #ac7b0d; }
 .flow-action-icon[data-skill="blue"] { color: #4c82ce; }
-.flow-node-time {
-  flex: none;
-  color: var(--muted);
-  font-size: 11px;
-}
 .flow-invalid-mark {
   color: var(--red);
 }
-.flow-node-actor {
-  margin-top: 6px;
-  color: var(--muted);
-  font-size: 11px;
-  overflow-wrap: anywhere;
-}
 .flow-node-notes {
-  margin-top: 10px;
-  padding-top: 9px;
-  border-top: 1px solid var(--border);
+  margin-top: 5px;
+  padding-top: 0;
   color: var(--text);
   font-size: 12px;
-  line-height: 1.75;
+  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -266,7 +264,7 @@ button.flow-node-card:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin: 9px 0 0;
+  margin: 6px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -275,7 +273,7 @@ button.flow-node-card:hover {
   gap: 5px;
   align-items: center;
   border-radius: 5px;
-  padding: 4px 6px;
+  padding: 2px 4px;
   background: var(--subtle);
   font-size: 11px;
   overflow-wrap: anywhere;
@@ -285,15 +283,15 @@ button.flow-node-card:hover {
 }
 .flow-parallel-group {
   position: relative;
-  margin-top: 25px;
+  margin-top: 16px;
   padding: 0 8px;
 }
 .flow-parallel-group::before {
   content: '';
   position: absolute;
-  top: -25px;
+  top: -16px;
   left: 50%;
-  height: 24px;
+  height: 15px;
   width: 1px;
   background: var(--border);
 }
@@ -542,3 +540,30 @@ button.flow-node-card:hover {
     min-width: 250px;
   }
 }
+
+.flow-member-icons { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.flow-member-icon { display: inline-flex; align-items: center; gap: 4px; }
+
+.flow-node-card.has-actor { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 9px; align-items: center; }
+.flow-node-portraits { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.flow-node-content { min-width: 0; }
+.flow-unknown-actor { display: grid; place-items: center; width: 28px; height: 28px; border: 1px dashed var(--border); border-radius: 6px; color: var(--muted); }
+
+.flow-row { display: flex; flex-direction: column; align-items: center; position: relative; }
+.flow-row-nodes { display: flex; justify-content: center; align-items: flex-start; gap: 7px; }
+.flow-row.unified-group { align-self: center; align-items: stretch; width: max-content; min-width: 300px; padding: 10px 12px 10px 48px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.flow-group-avatar { position: absolute; left: 12px; top: 13px; }
+.flow-row.unified-group > .flow-row-nodes { justify-content: flex-start; gap: 15px; }
+.flow-row.unified-group > .flow-row-nodes > .flow-step > .flow-node-card { width: max-content; min-width: 0; max-width: 210px; padding: 3px 0; border-color: transparent; background: transparent; box-shadow: none; border-radius: 4px; }
+.flow-row.unified-group > .flow-row-nodes > .flow-step > .flow-node-card::before { display: none; }
+.flow-row.unified-group > .flow-row-nodes > .flow-step > .flow-node-card.selected { background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); }
+.flow-row.unified-group > .flow-row-nodes > .flow-step > button.flow-node-card:hover { background: var(--hover); }
+.flow-row.unified-group .flow-node-number { display: none; }
+.flow-row.unified-group .flow-node-top { gap: 5px; }
+.flow-row.unified-group > .flow-row-nodes > .flow-step:not(:last-child)::after { content: '›'; position: absolute; left: calc(100% + 5px); top: 3px; font-size: 13px; color: var(--faint); }
+.flow-row.unified-group::before { content: ''; position: absolute; top: -6px; left: calc(50% - 4px); border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--muted); }
+.flow-row.unified-group .flow-node-notes { color: var(--muted); font-size: 11px; margin-top: 3px; }
+.flow-group-controls { display: flex; gap: 8px; align-items: center; }
+.flow-group-controls > :first-child { flex: 1; min-width: 0; }
+
+.flow-group-note { align-self: stretch; width: 0; min-width: 100%; margin: 7px 0 0; padding: 7px 0 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGuideMember, type FlowNode, type GuideFlow, type GuideTeam } from '../src/shared/guides';
-import { analyzeGuideFlow, createFlowNode, findFlowNode, flattenFlowNodes, flowDuration, validateGuideFlow } from '../src/shared/guide-flow';
+import { analyzeGuideFlow, createFlowNode, findFlowNode, flattenFlowNodes, validateGuideFlow } from '../src/shared/guide-flow';
 
 /** 三名真实业务角色的最小替身，只隔离流程语义，不依赖名称。 */
 const team = (): GuideTeam => ({
@@ -13,9 +13,31 @@ const node = (id: string, changes: Partial<FlowNode> = {}): FlowNode => ({ ...cr
 const flow = (...nodes: FlowNode[]): GuideFlow => ({ mode: 'single', nodes });
 
 describe('攻略操作流程及在场角色', () => {
+  it('启动段只运行一次，后续轮次从指定主节点继续校验', () => {
+    const value: GuideFlow = { mode: 'loop', loopStartId: 'cycle', nodes: [
+      node('startup', { type: 'qte', qteMemberIds: ['b'] }),
+      node('cycle', { type: 'switch', memberId: 'b' }),
+      node('finish', { type: 'qte', qteMemberIds: ['a'] }),
+    ] };
+    const result = analyzeGuideFlow(value, team());
+    expect(result.issues).toEqual([]);
+    expect(result.contexts.startup.activeMemberIds).toEqual(['a']);
+    expect(result.contexts.cycle.activeMemberIds).toContain('b');
+    expect(validateGuideFlow({ ...value, loopStartId: '' }, team()).some(issue => issue.path.includes('startup'))).toBe(true);
+    expect(validateGuideFlow({ ...value, loopStartId: 'missing' }, team()).some(issue => issue.path === 'flow.loopStartId')).toBe(true);
+  });
+
   it('新技能、闪避和普攻默认短按，空草稿不强制出现节点', () => {
     for (const type of ['attack', 'skill', 'dodge'] as const) expect(createFlowNode(type).press).toBe('tap');
     expect(validateGuideFlow(flow(), team())).toEqual([]);
+  });
+
+  it('清除循环入口后整套执行一次，保留已有操作节点', () => {
+    const nodes = [node('q', { type: 'qte', qteMemberIds: ['b'] }), node('swap', { type: 'switch', memberId: 'b' })];
+    const before = JSON.stringify(nodes);
+    expect(validateGuideFlow({ mode: 'loop', loopStartId: 'q', nodes }, team()).length).toBeGreaterThan(0);
+    expect(validateGuideFlow({ mode: 'single', loopStartId: '', nodes }, team())).toEqual([]);
+    expect(JSON.stringify(nodes)).toBe(before);
   });
 
   it('同一个QTE节点保留多个角色的重复调用和先后次序', () => {
@@ -37,12 +59,11 @@ describe('攻略操作流程及在场角色', () => {
   });
 
   it('长按普攻的多个并行QTE分支与父节点同时开始，分支内可连续操作', () => {
-    const input = flow(node('hold', { press: 'hold', durationSeconds: 3, branches: [
-      [node('q1', { type: 'qte', qteMemberIds: ['b', 'b'], durationSeconds: 1 }), node('q2', { type: 'qte', qteMemberIds: ['c'], durationSeconds: 1 })],
-      [node('q3', { type: 'qte', qteMemberIds: ['c'], durationSeconds: 0.5 })],
-    ] }), node('after', { durationSeconds: 2 }));
+    const input = flow(node('hold', { press: 'hold', branches: [
+      [node('q1', { type: 'qte', qteMemberIds: ['b', 'b'] }), node('q2', { type: 'qte', qteMemberIds: ['c'] })],
+      [node('q3', { type: 'qte', qteMemberIds: ['c'] })],
+    ] }), node('after'));
     expect(validateGuideFlow(input, team())).toEqual([]);
-    expect(flowDuration(input)).toEqual({ seconds: 5, complete: true });
     expect(flattenFlowNodes(input).map(item => item.node.id)).toEqual(['hold', 'q1', 'q2', 'q3', 'after']);
     expect(findFlowNode(input, 'q2')).toMatchObject({ depth: 2, parent: { id: 'hold' }, branchIndex: 0, index: 1 });
   });

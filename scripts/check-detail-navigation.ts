@@ -253,7 +253,6 @@ try {
   await page.getByPlaceholder('搜索名称、别名或关键词').fill('arena-');
   await page.locator('.catalog-order .n-select').click();
   await page.locator('.n-base-select-option:visible').filter({ hasText: /^名称顺序$/ }).click();
-  await page.locator('.catalog-toolbar').getByRole('button', { name: /^筛选/ }).click();
   await page.locator('[data-facet="gameplay"] .n-select').click();
   await page.locator('.n-base-select-option:visible').filter({ hasText: /^纷争战区$/ }).click();
   await page.getByRole('button', { name: '应用筛选', exact: true }).click();

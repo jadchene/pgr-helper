@@ -1,6 +1,6 @@
 {
   "name": "@jadchene/pgr-helper",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "战双助手：战双帕弥什资料查询与配队攻略桌面助手",
   "repository": {
@@ -36,6 +36,8 @@
     "test:skills": "tsx scripts/check-skill-layout.ts",
     "test:guides": "tsx scripts/check-guides.ts",
     "test:guides:links": "tsx scripts/check-guide-links.ts",
+    "test:guides:popovers": "tsx scripts/check-guide-popovers.ts",
+    "test:presets": "tsx scripts/check-presets.ts",
     "test:packaged": "node scripts/smoke-packaged.mjs",
     "pack": "npm run build && electron-builder --dir"
   },

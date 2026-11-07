@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { snapshotSchema } from '../../src/main/schemas';
 import type { CatalogEntry, CatalogSnapshot } from '../../src/shared/types';
 import type { GuideDocument, GuideMember, FlowNodeType } from '../../src/shared/guides';
 import { createGuide, createGuideMember, teamPositions } from '../../src/shared/guides';
@@ -8,6 +10,11 @@ import { readMyssalHttpFixture } from './myssal-http-fixture';
 
 /** 通过当前生产加载器读取固定真实表，适用于单测和隔离桌面验证。 */
 export const loadGuideSnapshot = async (repository: string): Promise<CatalogSnapshot> => {
+  // 业务回归可使用开发程序已同步的快照；原始表适配测试仍走仓库样本。
+  if (process.env.PGR_TEST_CATALOG) {
+    const cache = JSON.parse(readFileSync(process.env.PGR_TEST_CATALOG, 'utf8'));
+    return snapshotSchema.parse(typeof cache.payload === 'string' ? JSON.parse(cache.payload) : cache);
+  }
   const fixture = await readMyssalHttpFixture(repository);
   const original = globalThis.fetch;
   try {
@@ -86,7 +93,6 @@ export const buildGuideFixture = (entries: readonly CatalogEntry[]): GuideDocume
   const [first, second, third] = guide.team.members;
   const attack = node('attack');
   attack.press = 'hold';
-  attack.durationSeconds = 3;
   attack.notes = '长按普攻时同时触发后台成员 QTE';
   const qte = node('qte');
   qte.qteMemberIds = [second.id, third.id, second.id];

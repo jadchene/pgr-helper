@@ -132,13 +132,13 @@ try {
   await openStage(stageId);
   await page.locator('.detail-page').getByRole('button', { name: '新建关联攻略', exact: true }).click();
   await page.locator('.guides-page[data-guide-mode="edit"]').waitFor();
-  const tags = page.locator('.guide-basic-form > label').filter({ hasText: /^适用副本/ }).locator('.n-tag:visible');
+  const tags = page.locator('.n-select[aria-label="适用副本"] .n-tag:visible');
   assert.equal(await tags.count(), 1);
   assert((await tags.innerText()).includes(byId.get(stageId)!.name));
-  await page.getByPlaceholder('例如：囚笼物理队单套流程').fill('不保存的关联入口验证');
+  await page.getByPlaceholder('例如：囚笼物理队操作流程').fill('不保存的关联入口验证');
   await page.locator('.guide-editor-toolbar').getByRole('button', { name: '返回列表', exact: true }).click();
   await page.locator('.n-dialog').getByRole('button', { name: '继续编辑', exact: true }).click();
-  assert.equal(await page.getByPlaceholder('例如：囚笼物理队单套流程').inputValue(), '不保存的关联入口验证');
+  assert.equal(await page.getByPlaceholder('例如：囚笼物理队操作流程').inputValue(), '不保存的关联入口验证');
   assert.equal(await tags.count(), 1);
   await capture('副本预选与未保存保护');
   await page.locator('.guide-editor-toolbar').getByRole('button', { name: '返回列表', exact: true }).click();

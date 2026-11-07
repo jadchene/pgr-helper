@@ -100,6 +100,11 @@ const openSource = async (images = false) => {
       </n-button>
     </header>
     <div class="settings-scroll">
+      <section class="sync-status-summary" aria-label="当前资料状态">
+        <div><span>当前资料</span><strong>{{ displayVersion(state.currentVersion?.version || '') || '尚未同步' }}</strong></div>
+        <div><span>可用条目</span><strong>{{ state.entries.filter(item => !item.hidden).length.toLocaleString() }}</strong></div>
+        <div><span>更新方式</span><strong>预览后确认启用</strong></div>
+      </section>
       <section class="panel">
         <div class="panel-heading">
           <div>

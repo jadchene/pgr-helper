@@ -70,7 +70,12 @@ export const attachAssetImages = async (snapshot: CatalogSnapshot, signal: Abort
   const imageSource = source;
   const entries = snapshot.entries.map(entry => {
     const file = entryAssetPath(entry);
-    return { ...entry, image: file ? `https://raw.githubusercontent.com/${assetRepository}/${imageSource.revision}/${file}` : '' };
+    const sections = entry.sections.map(section => {
+      if (!section.skill) return section;
+      const icon = assetPath(section.skill.iconResource || '');
+      return { ...section, skill: { ...section.skill, image: icon ? `https://raw.githubusercontent.com/${assetRepository}/${imageSource.revision}/${icon}` : '' } };
+    });
+    return { ...entry, sections, image: file ? `https://raw.githubusercontent.com/${assetRepository}/${imageSource.revision}/${file}` : '' };
   });
   warnings.push('图片来源为 PGR_Assets，更新进度可能落后于文字资料。图片按浏览需要下载并缓存；缺图或下载失败时显示分类图标。');
   return { ...snapshot, entries, imageSource, warnings };

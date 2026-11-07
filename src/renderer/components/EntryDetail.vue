@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DictionaryBadge from './DictionaryBadge.vue';
 import { computed, onMounted, ref } from "vue";
 import {
   NButton,
@@ -28,6 +29,8 @@ const props = defineProps<{
   pending: boolean;
   guides?: GuideRecord[];
 }>();
+/** 详情分区直达，不改变列表返回状态。 */
+const jumpToDetail = (section: string): void => document.getElementById('detail-' + section)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 const emit = defineEmits<{
   close: [];
   edit: [entry: EntryView];
@@ -127,7 +130,7 @@ const openLink = async (url: string) => {
               }}<span v-if="entry.rarity"> · {{ entry.rarity }}</span>
             </div>
             <h1 id="entry-detail-title" ref="detailTitle" tabindex="-1">{{ entry.name }}</h1>
-            <p v-if="entry.subtitle">{{ entry.subtitle }}</p>
+            <p v-if="entry.subtitle">{{ entry.subtitle }}</p><div v-if="entry.aliases.length" class="detail-aliases"><span>别名</span><span v-for="alias in entry.aliases" :key="alias" class="neutral-tag">{{ alias }}</span></div>
           </div>
         </div>
         <div class="detail-tags">
@@ -135,19 +138,16 @@ const openLink = async (url: string) => {
             v-if="entry.element"
             class="element-tag"
             :data-element="entry.element"
-            >{{ entry.element }}</span
-          ><span v-if="entry.profession" class="neutral-tag">{{
-            entry.profession
-          }}</span
-          ><span v-for="tag in visibleTags" :key="tag" class="neutral-tag">{{
-            tag
-          }}</span
+            ><DictionaryBadge :entries="entries" :value="entry.element" type="属性" /></span
+          ><span v-if="entry.profession" class="neutral-tag"><DictionaryBadge :entries="entries" :value="entry.profession" type="职业" /></span
+          ><span v-for="tag in visibleTags" :key="tag" class="neutral-tag"><DictionaryBadge :entries="entries" :value="tag" type="队伍效应" /></span
           ><span
             v-if="entry.modified || entry.origin === 'local'"
             class="local-tag"
             >{{ entry.origin === "local" ? "本地新增" : "本地修改" }}</span
           >
         </div>
+        <nav class="detail-jump" aria-label="详情分区"><button v-if="entry.description" @click="jumpToDetail('summary')">简介</button><button v-if="readableAttributes.length" @click="jumpToDetail('attributes')">基础属性</button><button v-if="skillSections.length" @click="jumpToDetail('skills')">技能</button><button v-if="related.length" @click="jumpToDetail('relations')">关联资料</button></nav>
         <n-alert
           v-if="entry.hidden"
           type="warning"
@@ -162,22 +162,11 @@ const openLink = async (url: string) => {
           class="detail-alert"
           >当前来源版本已移除此条资料，本地内容仍被保留。</n-alert
         >
-        <section v-if="entry.description" class="detail-section">
+        <section v-if="entry.description" id="detail-summary" class="detail-section">
           <h2><FileText :size="15" />简介</h2>
           <p class="rich-text">{{ entry.description }}</p>
         </section>
-        <section v-if="entry.aliases.length" class="detail-section">
-          <h2>别名</h2>
-          <div class="detail-tags">
-            <span
-              v-for="alias in entry.aliases"
-              :key="alias"
-              class="neutral-tag"
-              >{{ alias }}</span
-            >
-          </div>
-        </section>
-        <section v-if="readableAttributes.length" class="detail-section">
+        <section v-if="readableAttributes.length" id="detail-attributes" class="detail-section">
           <h2>基础属性</h2>
           <dl class="attribute-list">
             <div v-for="[key, value] in readableAttributes" :key="key">
@@ -194,10 +183,10 @@ const openLink = async (url: string) => {
             </div>
           </dl>
         </section>
-        <SkillBook v-if="skillSections.length" :sections="skillSections" />
+        <div v-if="skillSections.length" id="detail-skills"><SkillBook :sections="skillSections" /></div>
         <section v-if="entry.category === 'stage'" class="detail-section">
           <div class="section-toolbar"><h2>关联攻略 <span class="muted">{{ stageGuides.length }}</span></h2><n-button size="small" :disabled="pending" @click="emit('createGuide', entry.id)">新建关联攻略</n-button></div>
-          <div v-if="stageGuides.length" class="related-list"><button v-for="guide in stageGuides" :key="guide.id" @click="emit('openGuide', guide.id)"><FileText :size="17" /><span><strong>{{ guide.name }}</strong><small>{{ guide.flow.mode === 'loop' ? '循环流程' : '单套流程' }} · {{ guide.status === 'ready' ? '已完成' : '草稿' }}</small></span><ArrowUpRight :size="14" /></button></div>
+          <div v-if="stageGuides.length" class="related-list"><button v-for="guide in stageGuides" :key="guide.id" @click="emit('openGuide', guide.id)"><FileText :size="17" /><span><strong>{{ guide.name }}</strong><small>{{ guide.flow.mode === 'loop' ? '含循环步骤' : '执行一次' }} · {{ guide.status === 'ready' ? '已完成' : '草稿' }}</small></span><ArrowUpRight :size="14" /></button></div>
           <p v-else class="muted">还没有适用于此副本的攻略。</p>
         </section>
         <section
@@ -208,7 +197,7 @@ const openLink = async (url: string) => {
           <h2>{{ section.title }}</h2>
           <p class="rich-text">{{ section.body || "暂无内容" }}</p>
         </section>
-        <section v-if="related.length" class="detail-section">
+        <section v-if="related.length" id="detail-relations" class="detail-section">
           <h2>
             <Link2 :size="15" />关联资料<span class="muted">{{
               related.length

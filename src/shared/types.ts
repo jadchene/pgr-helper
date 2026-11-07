@@ -1,3 +1,4 @@
+import type { PresetDocument, PresetRecord } from './presets';
 import type { GuideEntryOptions } from './guide-options';
 import type { GuideDocument, GuideRecord } from './guides';
 
@@ -16,6 +17,8 @@ export interface EntrySection {
 }
 /** 技能段落的源结构，不依赖名称或正文推测分类。 @author chenjd @created 2026-11-06 16:00:00 */
 export interface SkillSectionMetadata {
+  /** 来源明确给出的图标资源路径。 */ iconResource?: string;
+  /** 固定图片版本对应的可展示图标。 */ image?: string;
   /** 区分机体和辅助机技能。 */ kind: 'character' | 'pet-active' | 'pet-passive';
   /** 技能或升阶记录的稳定源标识。 */ id: string;
   /** 大类标识。 */ groupId: string;
@@ -135,6 +138,7 @@ export interface SyncProgress {
 }
 /** 应用启动数据。 @author chenjd @created 2026-11-06 13:30:00 */
 export interface AppState {
+  /** 本地机体及通用预设。 */ presets: PresetRecord[];
   /** 应用版本。 */ appVersion: string;
   /** 本地数据目录。 */ dataDirectory: string;
   /** 用户偏好。 */ settings: AppSettings;
@@ -145,6 +149,8 @@ export interface AppState {
 }
 /** 受限的桌面桥接接口。 @author chenjd @created 2026-11-06 13:30:00 */
 export interface DesktopApi {
+  /** 保存预设。 */ savePreset: (preset: PresetDocument, revision: number | null) => Promise<PresetRecord>;
+  /** 删除或恢复预设。 */ setPresetHidden: (id: string, hidden: boolean, revision: number) => Promise<PresetRecord>;
   /** 保存攻略；已有记录必须传入读取时的修订号。 */ saveGuide: (guide: GuideDocument, revision: number | null) => Promise<GuideRecord>;
   /** 将攻略移至回收站或恢复。 */ setGuideHidden: (id: string, hidden: boolean, revision: number) => Promise<GuideRecord>;
   /** 按需读取受限图片源，返回已缓存的 PNG 数据或空值。 */ resolveAssetImage: (url: string) => Promise<string | null>;

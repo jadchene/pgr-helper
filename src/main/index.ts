@@ -1,3 +1,4 @@
+import type { PresetDocument } from '../shared/presets';
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } from 'electron';
 import { mkdirSync, renameSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -59,6 +60,8 @@ const registerApi = (): void => {
   const updater = sync!;
   const state = () => db.getState(app.getVersion());
   handle('getState', state);
+  handle('savePreset', (preset: PresetDocument, revision: number | null) => db.savePreset(preset, revision));
+  handle('setPresetHidden', (id: string, hidden: boolean, revision: number) => db.setPresetHidden(id, hidden, revision));
   handle('saveGuide', (guide: GuideDocument, revision: number | null) => db.saveGuide(guide, revision));
   handle('setGuideHidden', (id: string, hidden: boolean, revision: number) => db.setGuideHidden(String(id), hidden, revision));
   handle('resolveAssetImage', (url: unknown) => typeof url === 'string' ? imageCache!.resolve(url) : null);

@@ -1,17 +1,22 @@
 <script setup lang="ts">
+import { useCatalogSelectLabel } from '../catalog-select-label';
 import { computed, ref, watch } from 'vue';
 import { NAlert, NButton, NInput, NInputNumber, NSelect, useDialog } from 'naive-ui';
 import { ArrowDown, ArrowUp, Copy, GitBranch, Plus, Trash2, X } from 'lucide-vue-next';
 import type { FlowNode, FlowNodeType, GuideFlow, GuideTeam } from '../../shared/guides';
-import { analyzeGuideFlow, createFlowNode, findFlowNode, flattenFlowNodes, flowLimits, flowMemberName, flowNodeLabels, flowSkillLabels } from '../../shared/guide-flow';
+import { analyzeGuideFlow, canRepeatFlowNode, flowGroupActor, normalizeFlowGroups, createFlowNode, findFlowNode, flattenFlowNodes, flowLimits, flowMemberName, flowNodeLabels, flowSkillLabels } from '../../shared/guide-flow';
 import type { EntryView } from '../../shared/types';
 import GuideFlowView from './GuideFlowView.vue';
 import './guide-flow.css';
+import { useGuideSelectMenus } from '../guide-select-menus';
 
 const props = defineProps<{ modelValue: GuideFlow; team: GuideTeam; entries: EntryView[] }>();
+const { renderCatalogLabel } = useCatalogSelectLabel(() => props.entries, value => props.entries.find(entry => entry.id === props.team.members.find(member => member.id === value)?.characterId));
 const emit = defineEmits<{ 'update:modelValue': [flow: GuideFlow] }>();
 const dialog = useDialog();
 const selectedId = ref('');
+const { selectMenu, closeSelectMenus } = useGuideSelectMenus();
+watch(selectedId, closeSelectMenus);
 const newType = ref<FlowNodeType>('attack');
 const locations = computed(() => flattenFlowNodes(props.modelValue));
 const selected = computed(() => findFlowNode(props.modelValue, selectedId.value));
@@ -32,6 +37,7 @@ watch(() => props.modelValue, value => {
 const mutate = (change: (copy: GuideFlow) => void): void => {
   const copy = JSON.parse(JSON.stringify(props.modelValue)) as GuideFlow;
   change(copy);
+  normalizeFlowGroups(copy, props.team);
   emit('update:modelValue', copy);
 };
 /** 当前节点字段修改保留并行分支和其他已填写内容。 */
@@ -41,16 +47,35 @@ const update = (patch: Partial<FlowNode>): void => {
     if (target) Object.assign(target.node, patch);
   });
 };
+/** 仅提供同一在场机体的相邻分组，避免移动操作顺序。 */
+const groupOptions = computed(() => {
+  const target = selected.value;
+  if (!target) return [];
+  const actor = flowGroupActor(target.node, analysis.value.contexts);
+  return [...new Set([target.node.group, ...[-1, 1].map(offset => {
+    const adjacent = target.sequence[target.index + offset];
+    if (!adjacent || !actor || flowGroupActor(adjacent, analysis.value.contexts) !== actor) return 0;
+    const left = offset === -1 ? adjacent : target.node;
+    const right = offset === -1 ? target.node : adjacent;
+    return !left.branches.length && !(props.modelValue.mode === 'loop' && props.modelValue.loopStartId === right.id) ? adjacent.group : 0;
+  })])].filter(Boolean).map(value => ({ value, label: `分组 ${value}` }));
+});
+/** 自动使用当前最大编号之后的新编号，不复用仍存在的组。 */
+const createGroup = (): void => update({ group: Math.max(0, ...locations.value.map(item => item.node.group || 0)) + 1 });
+/** 整组共享备注，修改任一成员的组备注都会更新同一份内容。 */
+const updateGroupNote = (text: string): void => {
+  const group = selected.value?.node.group;
+  if (!group) return;
+  mutate(copy => { copy.groupNotes = { ...copy.groupNotes, [group]: text }; });
+};
 /** 改变动作时清理已不适用的角色引用，不沿用隐藏的 QTE 或切人目标。 */
-const changeType = (type: FlowNodeType): void => update({ type, memberId: '', qteMemberIds: [] });
-/** 选择循环或单套不会改写用户已经记录的节点。 */
-const changeMode = (mode: GuideFlow['mode']): void => mutate(copy => { copy.mode = mode; });
+const changeType = (type: FlowNodeType): void => update({ type, memberId: '', qteMemberIds: [], count: 1, group: 0 });
 
 /** 添加到主流程末尾；在分支编辑时也能明确回到主线继续记录。 */
 const appendMain = (): void => {
   if (!canAdd.value) return;
   const node = createFlowNode(newType.value);
-  mutate(copy => { copy.nodes.push(node); });
+  mutate(copy => { node.group = copy.nodes.at(-1)?.group || 0; copy.nodes.push(node); });
   selectedId.value = node.id;
 };
 /** 在所选节点的同一连续流程中插入，避免误把串行操作变为并行。 */
@@ -59,7 +84,7 @@ const insert = (offset: 0 | 1): void => {
   const node = createFlowNode(newType.value);
   mutate(copy => {
     const target = findFlowNode(copy, selectedId.value);
-    if (target) target.sequence.splice(target.index + offset, 0, node);
+    if (target) { node.group = target.node.group; target.sequence.splice(target.index + offset, 0, node); }
   });
   selectedId.value = node.id;
 };
@@ -166,14 +191,15 @@ const selectIssue = (path: string): void => {
 <template>
   <section class="guide-flow-editor">
     <div class="flow-editor-toolbar">
-      <div class="flow-mode-picker" role="group" aria-label="流程模式">
-        <button type="button" :aria-pressed="modelValue.mode === 'single'" @click="changeMode('single')">单套流程</button>
-        <button type="button" :aria-pressed="modelValue.mode === 'loop'" @click="changeMode('loop')">循环流程</button>
-      </div>
       <div class="flow-add-main">
-        <n-select v-model:value="newType" :options="typeOptions" aria-label="新增动作类型" class="flow-new-type" />
+        <n-select v-bind="selectMenu('new-type')" v-model:value="newType" :options="typeOptions" aria-label="新增动作类型" class="flow-new-type" />
         <n-button :disabled="!canAdd" @click="appendMain"><template #icon><Plus :size="15" /></template>添加主流程节点</n-button>
       </div>
+    </div>
+    <div class="flow-field">
+      <span>循环从哪一步开始</span>
+      <n-select v-bind="selectMenu('loop-start')" :value="modelValue.mode === 'loop' ? modelValue.loopStartId || modelValue.nodes[0]?.id || null : null" :options="modelValue.nodes.map((node, index) => ({ value: node.id, label: `第 ${index + 1} 步 · ${flowNodeLabels[node.type]}` }))" clearable aria-label="循环入口" placeholder="不循环，所有步骤只执行一次" @update:value="value => mutate(copy => { copy.loopStartId = value || ''; copy.mode = value ? 'loop' : 'single'; })" />
+      <small>不设置入口时，全部步骤只执行一次；设置后，入口之前只执行一次，入口及后续步骤循环执行。</small>
     </div>
     <n-alert v-if="analysis.issues.length" type="warning" :bordered="false" class="flow-validation">
       <details><summary>{{ analysis.issues.length }} 处操作需要补充或调整</summary><ul><li v-for="(issue, index) in analysis.issues" :key="index"><button type="button" class="text-button" @click="selectIssue(issue.path)">{{ issue.message }}</button></li></ul></details>
@@ -190,9 +216,9 @@ const selectIssue = (path: string): void => {
           <n-button size="small" :disabled="locations.length + flattenFlowNodes({ mode: 'single', nodes: [selected.node] }).length > flowLimits.nodes" aria-label="复制节点" title="复制节点及分支" @click="duplicate"><template #icon><Copy :size="14" /></template></n-button>
           <n-button size="small" type="error" quaternary aria-label="删除节点" title="删除节点" @click="remove"><template #icon><Trash2 :size="14" /></template></n-button>
         </div>
-        <label class="flow-field"><span>节点类型</span><n-select :value="selected.node.type" :options="typeOptions" aria-label="节点类型" @update:value="changeType" /></label>
-        <label v-if="selected.node.type === 'switch'" class="flow-field"><span>切换到</span><n-select :value="selected.node.memberId || null" :options="memberOptions" placeholder="选择队伍中的机体" aria-label="切换目标机体" @update:value="update({ memberId: $event })" /></label>
-        <label v-if="selected.node.type === 'skill'" class="flow-field"><span>技能操作</span><n-select :value="selected.node.skill" :options="skillOptions" aria-label="技能操作" @update:value="update({ skill: $event })" /></label>
+        <div class="flow-field"><span>节点类型</span><n-select v-bind="selectMenu('node-type')" :value="selected.node.type" :options="typeOptions" aria-label="节点类型" @update:value="changeType" /></div>
+        <div v-if="selected.node.type === 'switch'" class="flow-field"><span>切换到</span><n-select v-bind="selectMenu('switch-target')" :value="selected.node.memberId || null" :options="memberOptions" :render-label="renderCatalogLabel" placeholder="选择队伍中的机体" aria-label="切换目标机体" @update:value="update({ memberId: $event })" /></div>
+        <div v-if="selected.node.type === 'skill'" class="flow-field"><span>技能操作</span><n-select v-bind="selectMenu('skill')" :value="selected.node.skill" :options="skillOptions" aria-label="技能操作" @update:value="update({ skill: $event, count: 1 })" /></div>
         <div v-if="['skill', 'attack', 'dodge'].includes(selected.node.type)" class="flow-field"><span>按法</span><div class="flow-press-picker" role="group" aria-label="按法"><button type="button" :aria-pressed="selected.node.press === 'tap'" @click="update({ press: 'tap' })">短按</button><button type="button" :aria-pressed="selected.node.press === 'hold'" @click="update({ press: 'hold' })">长按</button></div></div>
         <div v-if="selected.node.type === 'qte'" class="flow-qte-editor">
           <h4>QTE 触发顺序</h4>
@@ -201,7 +227,9 @@ const selectIssue = (path: string): void => {
           <p v-if="!qteOptions.length" class="flow-qte-unavailable">{{ context?.unknownActive ? '请先设置首发并补全前面的切人目标。' : '当前没有确定不在场的机体，请检查队伍或并行切人。' }}</p>
           <ol class="flow-qte-sequence"><li v-for="(memberId, index) in selected.node.qteMemberIds" :key="index" :class="{ invalid: invalidQte(memberId) }"><span class="flow-qte-index">{{ index + 1 }}</span><span class="flow-qte-name">{{ flowMemberName(team, entries, memberId) }}</span><div class="flow-qte-tools"><button type="button" :disabled="index === 0" :aria-label="`上移第 ${index + 1} 次 QTE`" @click="moveQte(index, -1)"><ArrowUp :size="13" /></button><button type="button" :disabled="index === selected.node.qteMemberIds.length - 1" :aria-label="`下移第 ${index + 1} 次 QTE`" @click="moveQte(index, 1)"><ArrowDown :size="13" /></button><button type="button" :aria-label="`移除第 ${index + 1} 次 QTE`" @click="removeQte(index)"><X :size="13" /></button></div></li></ol>
         </div>
-        <label class="flow-field"><span>持续时间（秒，可选）</span><n-input-number :value="selected.node.durationSeconds" :min="0" :max="flowLimits.durationSeconds" :precision="2" clearable aria-label="节点持续时间" placeholder="不限定" @update:value="update({ durationSeconds: $event })" /></label>
+        <label v-if="canRepeatFlowNode(selected.node)" class="flow-field"><span>次数</span><n-input-number :value="selected.node.count" :min="1" :max="999" :precision="0" aria-label="操作次数" @update:value="update({ count: $event ?? 1 })" /></label>
+        <div class="flow-field"><span>节点分组</span><div class="flow-group-controls"><n-select v-bind="selectMenu('node-group')" :value="selected.node.group || null" :options="groupOptions" clearable placeholder="不分组" aria-label="节点分组" :disabled="!flowGroupActor(selected.node, analysis.contexts)" @update:value="update({ group: $event || 0 })" /><n-button :disabled="!flowGroupActor(selected.node, analysis.contexts)" @click="createGroup">新建分组</n-button></div><small>同一在场机体的相邻节点可排在一行，切人和循环入口保持分隔。</small></div>
+        <label v-if="selected.node.group" class="flow-field"><span>分组备注</span><n-input :value="modelValue.groupNotes?.[selected.node.group] || ''" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" :maxlength="4000" placeholder="整组操作的说明或触发条件" aria-label="分组备注" @update:value="updateGroupNote" /></label>
         <label class="flow-field"><span>节点备注</span><n-input :value="selected.node.notes" class="flow-node-notes-input" type="textarea" :autosize="{ minRows: 2, maxRows: 7 }" :maxlength="4000" placeholder="触发条件、时机或操作细节" aria-label="节点备注" @update:value="update({ notes: $event })" /></label>
         <section class="flow-branch-editor">
           <div class="flow-branch-editor-heading"><h4>并行操作</h4><n-button size="small" :disabled="!canAdd || selected.depth >= flowLimits.depth || selected.node.branches.length >= flowLimits.branches" @click="addBranch"><template #icon><GitBranch :size="14" /></template>添加分支</n-button></div>

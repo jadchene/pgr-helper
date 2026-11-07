@@ -43,7 +43,7 @@ afterEach(() => {
   }
 });
 
-describe.skipIf(!repository || !existsSync(repository))('攻略 SQLite 与完整备份', () => {
+describe.skipIf(!(process.env.PGR_TEST_CATALOG && existsSync(process.env.PGR_TEST_CATALOG)) && (!repository || !existsSync(repository)))('攻略 SQLite 与完整备份', () => {
   beforeAll(async () => {
     snapshot = await loadGuideSnapshot(repository!);
     guide = buildGuideFixture(snapshot.entries);

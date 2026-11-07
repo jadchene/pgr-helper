@@ -46,13 +46,16 @@ export interface FlowNode {
   /** 切换机体的目标成员；其他操作留空。 */ memberId: string;
   /** 技能类别；技能以外的操作忽略此字段。 */ skill: FlowSkill;
   /** 普攻、闪避和技能的按法，默认短按。 */ press: 'tap' | 'hold';
+  /** 红黄蓝球、普攻和闪避的重复次数。 */ count: number;
+  /** 同一连续流程的分组编号，0 表示不分组。 */ group: number;
   /** 按触发顺序记录的 QTE 成员，可重复，也可包含多个角色。 */ qteMemberIds: string[];
-  /** 可选操作持续时长，单位秒。 */ durationSeconds: number | null;
   /** 节点操作说明。 */ notes: string;
   /** 同时启动的多个子流程，各分支内仍按节点顺序执行。 */ branches: FlowNode[][];
 }
 /** 战区循环或囚笼单套流程。 @author chenjd @created 2026-11-06 16:30:00 */
 export interface GuideFlow {
+  /** 按分组编号记录的整体备注，无备注时可省略。 */ groupNotes?: Record<string, string>;
+  /** 循环入口的主流程节点标识，空值表示首节点；此前节点仅启动时执行。 */ loopStartId?: string;
   /** 单套执行完即结束；循环模式汇合后回到起点。 */ mode: 'single' | 'loop';
   /** 主流程的有序节点。 */ nodes: FlowNode[];
 }

@@ -108,6 +108,8 @@ const openProject = async () => {
     message.error(errorMessage(failure));
   }
 };
+/** 分区导航只滚动设置正文，保持顶部操作位置。 */
+const jumpTo = (id: string): void => { document.getElementById(`settings-${id}`)?.scrollIntoView({ block: 'start' }); };
 </script>
 
 <template>
@@ -119,8 +121,9 @@ const openProject = async () => {
         <p>调整外观、更新偏好与本地数据。</p>
       </div>
     </header>
+    <nav class="settings-jump" aria-label="设置分区"><button @click="jumpTo('appearance')">外观与字体</button><button @click="jumpTo('updates')">更新偏好</button><button @click="jumpTo('data')">数据与备份</button><button @click="jumpTo('about')">关于</button></nav>
     <div class="settings-scroll">
-      <section class="panel">
+      <section id="settings-appearance" class="panel">
         <div class="panel-heading">
           <div>
             <h2>外观</h2>
@@ -136,6 +139,7 @@ const openProject = async () => {
               { selected: state.settings.theme === theme.value },
             ]"
             :disabled="pending"
+            :aria-pressed="state.settings.theme === theme.value"
             @click="emit('settings', { theme: theme.value })"
           >
             <div :class="['theme-miniature', theme.value]">
@@ -217,7 +221,7 @@ const openProject = async () => {
           <p class="font-preview-latin">Punishing Gray Raven · 0123456789</p>
         </div>
       </section>
-      <section class="panel">
+      <section id="settings-updates" class="panel">
         <div class="setting-row">
           <div>
             <h2>启动时检查资料更新</h2>
@@ -239,10 +243,10 @@ const openProject = async () => {
           />
         </div>
       </section>
-      <section class="panel">
+      <section id="settings-data" class="panel">
         <div class="panel-heading">
           <div>
-            <h2><Database :size="16" />本地数据</h2>
+            <h2><Database :size="16" />本地数据与备份</h2>
             <p>资料、编辑记录和版本保存在此设备上。</p>
           </div>
           <n-button size="small" @click="openDirectory"
@@ -278,7 +282,7 @@ const openProject = async () => {
         <div class="setting-row backup-row">
           <div>
             <h3>备份与恢复</h3>
-            <p>备份包含基础资料、完整攻略、队伍与流程、本地编辑、设置和版本记录。</p>
+            <p>包含基础资料、配置预设、攻略与流程、设置和版本记录。</p>
           </div>
           <div class="button-row">
             <n-button
@@ -297,7 +301,7 @@ const openProject = async () => {
           </div>
         </div>
       </section>
-      <section class="panel about-panel">
+      <section id="settings-about" class="panel about-panel">
         <div class="about-icon"><BookMarked :size="25" /></div>
         <div>
           <h2>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useCatalogSelectLabel } from '../catalog-select-label';
 import { computed, onUnmounted, ref, watch } from "vue";
 import {
   NModal,
@@ -38,6 +39,7 @@ const props = defineProps<{
   pending: boolean;
   isNew: boolean;
 }>();
+const { renderCatalogLabel } = useCatalogSelectLabel(() => props.entries);
 const emit = defineEmits<{
   close: [];
   save: [entry: CatalogEntry];
@@ -465,7 +467,7 @@ const addSection = () =>
               v-model:value="form.relatedIds"
               multiple
               filterable
-              :options="relationOptions"
+              :options="relationOptions" :render-label="renderCatalogLabel"
               placeholder="搜索并选择关联资料"
               :disabled="pending"
             />

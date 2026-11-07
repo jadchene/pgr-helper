@@ -18,6 +18,19 @@ const response = (sha = revision) => new Response(JSON.stringify([{ sha, commit:
 afterEach(() => vi.restoreAllMocks());
 
 describe('独立图片来源', () => {
+  it('技能图标沿用同一固定图片提交，非法资源路径不生成地址', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response());
+    const base = snapshot();
+    const skill = { kind: 'pet-active' as const, id: 'skill-1', groupId: 'active', groupName: '主动', groupOrder: 1, familyId: 'main:1', familyName: '主动技能', typeName: '主动' };
+    base.entries[0].sections = [
+      { title: '技能', body: '技能效果', skill: { ...skill, iconResource: 'Assets/Product/Texture/Image/IconPetSkill/Active.png' } },
+      { title: '缺图', body: '', skill: { ...skill, id: 'skill-2', iconResource: '../../bad.png' } },
+    ];
+    const result = await attachAssetImages(base, new AbortController().signal);
+    expect(result.entries[0].sections[0].skill?.image).toBe(`https://raw.githubusercontent.com/undertheobservers/PGR_Assets/${revision}/assets/product/texture/image/iconpetskill/Active.png`);
+    expect(result.entries[0].sections[1].skill?.image).toBe('');
+    expect(base.entries[0].sections[0].skill?.image).toBeUndefined();
+  });
   it('转换完整路径并保留文件名大小写，拒绝不明路径', () => {
     expect(assetPath('Assets/Product/Texture/Image/Role/RoleHeadLi.png')).toBe('assets/product/texture/image/role/RoleHeadLi.png');
     expect(assetPath('Assets/Product/Texture/Atlas/Icon/Affix01.png')).toBe('assets/product/texture/atlas/icon/Affix01.png');

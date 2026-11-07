@@ -1,299 +1,118 @@
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
+import { _electron as electron, type ElectronApplication, type Page, type Locator } from '@playwright/test';
 import assert from 'node:assert/strict';
-import { execFile, type ChildProcess } from 'node:child_process';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { promisify } from 'node:util';
-import { CatalogStore } from '../src/main/store';
-import type { CatalogSnapshot } from '../src/shared/types';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve, join } from 'node:path';
+import { categories, categoryLabels } from '../src/shared/types';
+import { catalogQueryConfig, compareCatalogEntries, facetValues } from '../src/renderer/catalog-query';
 
-const project = resolve(import.meta.dirname, '..');
-const phase = process.env.PGR_FILTER_PHASE || 'regression';
-const evidence = resolve(process.env.PGR_EVIDENCE_DIR || join(project, 'test-results/filter-popovers', phase));
-const data = resolve(process.env.PGR_FILTER_DATA || join(project, `test-results/filter-popovers-data-${Date.now()}`));
-const snapshotPath = process.env.PGR_FILTER_SNAPSHOT ? resolve(process.env.PGR_FILTER_SNAPSHOT) : '';
-const execute = promisify(execFile);
-const cases: Record<string, unknown>[] = [];
-const report: Record<string, unknown> = {
-  startedAt: new Date().toISOString(), phase, passed: false, dataDirectory: data, snapshotPath,
-  sourceMode: '已审计固定 Git 表生成的完整 HTTP fixture 快照；未进行真实网络同步', cases,
-};
+const project=resolve(import.meta.dirname,'..');
+const data=join(project,'data');
+const evidence=resolve(process.env.PGR_EVIDENCE_DIR || join(project,'test-results/inline-filters'));
+const checks: string[] = [], errors: string[] = [];
+const report: Record<string,unknown>={passed:false,data,checks,errors};
 let app: ElectronApplication | undefined;
-let page: Page;
-
-/** 等待下拉菜单的短过渡完成，不依赖隐藏窗口的动画帧回调。 */
-const settle = () => page.waitForTimeout(450);
-
-/** 记录实际菜单和锚点矩形，定位器不依赖字段容器使用 label 还是 div。 */
-const state = async (key = 'gameplay') => page.evaluate(fieldKey => {
-  const field = document.querySelector(`[data-facet="${fieldKey}"]`);
-  const [anchor, fields] = [field?.querySelector('.n-select'), document.querySelector('.filter-fields')].map(element => {
-    if (!element) return null;
-    const r = element.getBoundingClientRect();
-    return { x: r.x, y: r.y, top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height };
-  });
-  return {
-    viewport: [innerWidth, innerHeight], fieldTag: field?.tagName, anchor, fields,
-    panelVisible: [...document.querySelectorAll('.filter-panel')].some(element => {
-      const r = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
-    }),
-    scrollTop: document.querySelector('.filter-fields')?.scrollTop || 0,
-    menus: [...document.querySelectorAll('.n-base-select-menu')].filter(element => {
-      const r = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
-    }).map(menu => {
-      const r = menu.getBoundingClientRect();
-      return {
-        rect: { x: r.x, y: r.y, top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height },
-        text: menu.textContent?.trim(), scrollTop: Math.max(menu.scrollTop, ...[...menu.querySelectorAll('*')].map(element => element.scrollTop)),
-      };
-    }),
-  };
-}, key);
-
-/** 用 Electron 截取当前测试窗口，保存菜单定位的真实绘制结果。 */
-const capture = async (name: string): Promise<void> => {
-  if (!app) return;
-  const png = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].capturePage()).toPNG().toString('base64'));
-  await writeFile(join(evidence, `${name}.png`), Buffer.from(png, 'base64'));
+let page!: Page;
+const exact=(text:string)=>new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}$`);
+const passed=(name:string)=>{checks.push(name);console.log(`通过：${name}`);};
+/** 下拉通过实际点击和搜索选择，保留正常焦点和关闭行为。 */
+const choose=async(control:Locator,value:string)=>{
+ await control.scrollIntoViewIfNeeded(); await control.click({position:{x:5,y:5}});
+ const input=control.locator('input').first();
+ if(await input.count() && await input.isEditable()) await input.fill(value);
+ await page.locator('.n-base-select-menu:visible .n-base-select-option').filter({hasText:exact(value)}).first().click();
+ await page.locator('.n-base-select-menu:visible').waitFor({state:'hidden'});
 };
-
-/** 每项从全新的副本筛选面板开始，避免前一项失败污染下一项。 */
-const reset = async (): Promise<void> => {
-  await page.locator('.category-nav').getByRole('button', { name: /^机体/ }).click();
-  await page.locator('.category-nav').getByRole('button', { name: /^副本/ }).click();
-  await page.locator('.catalog-toolbar').getByRole('button', { name: /^筛选/ }).click();
-  await page.locator('.filter-panel').waitFor({ state: 'visible' });
-  await settle();
+const capture=async(name:string)=>{
+ await page.waitForTimeout(350);
+ const png=await app!.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].capturePage()).toPNG().toString('base64'));
+ await writeFile(join(evidence,`${name}.png`),Buffer.from(png,'base64'));
 };
-
-/** 打开一个实际字段的下拉，不写入 Vue 内部状态。 */
-const open = async (key: string): Promise<void> => {
-  const select = page.locator(`[data-facet="${key}"] .n-select`);
-  await select.scrollIntoViewIfNeeded();
-  await select.click();
-  await settle();
-  assert.equal((await state(key)).menus.length, 1, `打开 ${key} 后应只有一个菜单`);
-};
-
-/** 要求菜单在视口内并贴近它自己的输入框，允许自动向上展开。 */
-const attached = (current: Awaited<ReturnType<typeof state>>): void => {
-  assert.equal(current.menus.length, 1);
-  assert(current.anchor && current.menus[0].rect);
-  const anchor = current.anchor;
-  const menu = current.menus[0].rect;
-  const gap = Math.min(Math.abs(menu.top - anchor.bottom), Math.abs(menu.bottom - anchor.top));
-  assert(gap <= 14, `菜单离锚点 ${gap.toFixed(1)}px，疑似掉到窗口底部`);
-  assert(Math.abs(menu.left - anchor.left) <= 14, '菜单横向脱离当前字段');
-  assert(menu.top >= -1 && menu.bottom <= current.viewport[1] + 1, '菜单超出窗口上下边界');
-};
-
-/** 逐项记录失败并继续骨干矩阵，before 报告允许保留多个独立复现。 */
-const check = async (name: string, action: () => Promise<Record<string, unknown>>, key = 'gameplay'): Promise<void> => {
-  const item: Record<string, unknown> = { name, passed: false };
-  try {
-    await reset();
-    Object.assign(item, await action());
-    item.passed = true;
-  } catch (error) {
-    item.failure = error instanceof Error ? error.message : String(error);
-    item.state = await state(key).catch(() => null);
-  }
-  cases.push(item);
-  await capture(`${String(cases.length).padStart(2, '0')}-${name}`).catch(error => { item.captureFailure = String(error); });
-  console.log(`${item.passed ? '通过' : '失败'}：${name}${item.failure ? `；${item.failure}` : ''}`);
-};
-
-/** 有界等待本测试主进程退出。 */
-const waitExit = (child: ChildProcess, milliseconds: number): Promise<boolean> => {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
-  return new Promise(done => {
-    const finish = (value: boolean): void => { clearTimeout(timer); child.removeListener('exit', onExit); done(value); };
-    const onExit = (): void => finish(true);
-    const timer = setTimeout(() => finish(false), milliseconds);
-    child.once('exit', onExit);
-  });
-};
-
-/** 关闭自己的 Electron 实例，必要时只清理本测试进程树。 */
-const cleanup = async (): Promise<void> => {
-  if (!app) return;
-  const child = app.process();
-  void app.evaluate(({ app: application }) => application.exit(0)).catch(() => {});
-  if (!(await waitExit(child, 2500))) {
-    if (process.platform === 'win32') {
-      await execute(join(process.env.SystemRoot || 'C:\\Windows', 'System32/taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 5000 }).catch(error => {
-        if (child.exitCode === null && child.signalCode === null) throw error;
-      });
-    } else child.kill('SIGKILL');
-    assert(await waitExit(child, 2500), '测试进程未能退出');
-  }
-  report.process = { pid: child.pid, exited: true, exitCode: child.exitCode };
-};
-
-await mkdir(evidence, { recursive: true });
+/** 读取展示结果，不访问组件内部状态。 */
+const shown=()=>page.locator('.catalog-page:visible .entry-card, .catalog-page:visible .entry-row').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-entry-id')));
 try {
-  assert(snapshotPath, '请设置 PGR_FILTER_SNAPSHOT，指向已审计固定源表生成的完整 fixture-snapshot.json');
-  await mkdir(data, { recursive: true });
-  assert.equal((await readdir(data)).length, 0, '拒绝使用非空数据目录');
-  const snapshot = JSON.parse(await readFile(snapshotPath, 'utf8')) as CatalogSnapshot;
-  const store = new CatalogStore(data);
-  try {
-    store.applySnapshot(snapshot, '筛选菜单回归专用固定表快照');
-    store.saveSettings({ ...store.getSettings(), theme: 'light', fontFamily: '', checkOnStartup: false });
-  } finally { store.close(); }
-  report.source = { revision: snapshot.revision, version: snapshot.version, total: snapshot.entries.length, tables: Object.keys(snapshot.fingerprints).length };
-  const env: Record<string, string> = { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string')), PGR_DATA_DIR: data, PGR_TEST_HIDDEN: '1' };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.PGR_DEV_URL;
-  app = await electron.launch({ args: [project], cwd: project, env, timeout: 30_000 });
-  page = await app.firstWindow();
-  page.setDefaultTimeout(6000);
-  await app.evaluate(({ BrowserWindow }) => {
-    const window = BrowserWindow.getAllWindows()[0];
-    window.webContents.setBackgroundThrottling(false);
-    window.setSize(1000, 680);
-    window.showInactive();
-  });
-  await page.locator('.entry-card').first().waitFor();
-
-  await check('点击当前字段标题关闭子菜单', async () => {
-    await open('gameplay');
-    const before = await state();
-    const field = await page.locator('[data-facet="gameplay"]').boundingBox();
-    assert(field);
-    await page.mouse.click(field.x + 12, field.y + 6);
-    await settle();
-    const after = await state();
-    assert(after.panelVisible, '父筛选面板应保留');
-    assert.equal(after.menus.length, 0, '点击字段标题后子菜单仍然存在');
-    return { before, after };
-  });
-  await check('点击筛选面板标题关闭子菜单', async () => {
-    await open('gameplay');
-    await page.locator('.filter-panel > strong').click();
-    await settle();
-    const after = await state();
-    assert(after.panelVisible);
-    assert.equal(after.menus.length, 0);
-    return { after };
-  });
-  await check('点击前一字段输入框上方空白关闭子菜单', async () => {
-    await open('mode');
-    const anchor = await page.locator('[data-facet="gameplay"] .n-select').boundingBox();
-    assert(anchor);
-    await page.mouse.click(anchor.x + anchor.width - 10, anchor.y - 3);
-    await settle();
-    const after = await state();
-    assert(after.panelVisible);
-    assert.equal(after.menus.length, 0, '空白点击打开或留下了另一字段菜单');
-    await open('gameplay');
-    const reopened = await state();
-    attached(reopened);
-    return { after, reopened };
-  });
-  await check('顺序切换字段只保留当前菜单', async () => {
-    await open('gameplay');
-    // 紧邻字段被前一菜单覆盖；选择其下方未遮挡的输入框，避免自动滚动干扰用例。
-    await open('boss');
-    const after = await state('boss');
-    attached(after);
-    assert(after.menus[0].text && !after.menus[0].text.includes('纷争战区'));
-    return { after };
-  }, 'boss');
-  await check('滚动父筛选区域不留下失去锚点的子菜单', async () => {
-    await open('gameplay');
-    const fields = await page.locator('.filter-fields').boundingBox();
-    assert(fields);
-    await page.mouse.move(fields.x + 2, fields.y + 4);
-    await page.mouse.wheel(0, 550);
-    await settle();
-    const after = await state();
-    assert(after.scrollTop > 0, '滚轮没有实际滚动父区域');
-    assert.equal(after.menus.length, 0, '字段离开视口后仍留下孤儿菜单');
-    assert(after.panelVisible);
-    return { after };
-  });
-  await check('关闭父筛选面板同时移除子菜单', async () => {
-    await open('gameplay');
-    await page.locator('.catalog-page .page-heading h1').click();
-    await settle();
-    const after = await state();
-    assert.equal(after.panelVisible, false);
-    assert.equal(after.menus.length, 0);
-    return { after };
-  });
-  await check('切换分类同时移除父子菜单', async () => {
-    await open('gameplay');
-    await page.locator('.category-nav').getByRole('button', { name: /^机体/ }).click();
-    await settle();
-    const after = await state();
-    assert.equal(after.panelVisible, false);
-    assert.equal(after.menus.length, 0);
-    return { after };
-  });
-  await check('顶部字段菜单紧贴锚点', async () => {
-    await open('gameplay');
-    const after = await state();
-    attached(after);
-    return { after };
-  });
-  await check('底部字段菜单向上展开且不掉到底部', async () => {
-    await open('configStatus');
-    const after = await state('configStatus');
-    attached(after);
-    return { after };
-  }, 'configStatus');
-  await check('窗口尺寸改变后没有孤儿菜单', async () => {
-    await open('configStatus');
-    await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1180, 780));
-    await settle();
-    const after = await state('configStatus');
-    if (after.menus.length) {
-      assert(after.panelVisible, '父面板关闭后菜单仍在');
-      attached(after);
-    }
-    return { after };
-  }, 'configStatus');
-  await check('下拉菜单内部滚轮不误关闭菜单', async () => {
-    await open('boss');
-    const before = await state('boss');
-    const menu = before.menus[0].rect;
-    await page.mouse.move(menu.left + menu.width / 2, menu.top + menu.height / 2);
-    await page.mouse.wheel(0, 300);
-    await settle();
-    const after = await state('boss');
-    assert.equal(after.menus.length, 1, '滚动选项时菜单被意外关闭');
-    assert(after.menus[0].scrollTop > before.menus[0].scrollTop || after.menus[0].text !== before.menus[0].text, '滚轮没有实际滚动选项');
-    return { before, after };
-  }, 'boss');
-  await check('搜索选择与显式应用草稿正常', async () => {
-    const before = await page.locator('.pagination-bar > span').innerText();
-    await open('boss');
-    await page.locator('[data-facet="boss"] input').fill('拉弥亚');
-    await page.locator('.n-base-select-option:visible').filter({ hasText: /^拉弥亚$/ }).click();
-    await settle();
-    assert.equal(await page.locator('.pagination-bar > span').innerText(), before, '未应用的选择改变了资料列表');
-    assert((await state('boss')).panelVisible);
-    await page.getByRole('button', { name: '应用筛选', exact: true }).click();
-    await settle();
-    const expected = snapshot.entries.filter(item => item.category === 'stage' && item.catalog?.facets.boss?.includes('拉弥亚')).length;
-    assert(expected > 0);
-    assert((await page.locator('.pagination-bar > span').innerText()).includes(`共 ${expected} 条`));
-    assert.equal(await page.locator('.entry-card').count(), Math.min(expected, 24));
-    return { expected, after: await state('boss') };
-  }, 'boss');
-  report.passed = cases.every(item => item.passed);
-  if (!report.passed) process.exitCode = 1;
-} catch (error) {
-  report.failure = error instanceof Error ? error.stack : String(error);
-  process.exitCode = 1;
-} finally {
-  try { await cleanup(); } catch (error) { report.cleanupFailure = String(error); report.passed = false; process.exitCode = 1; }
-  report.finishedAt = new Date().toISOString();
-  await writeFile(join(evidence, 'filter-popovers.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify({ passed: report.passed, checks: cases.length, failed: cases.filter(item => !item.passed).length, evidence }));
+ await mkdir(evidence,{recursive:true});
+ const env:Record<string,string>=Object.fromEntries(Object.entries(process.env).filter((item):item is [string,string]=>typeof item[1]==='string'));
+ delete env.PGR_DATA_DIR;delete env.PGR_DEV_URL;delete env.ELECTRON_RUN_AS_NODE;env.PGR_TEST_HIDDEN='1';
+ app=await electron.launch({args:[project],cwd:project,env});page=await app.firstWindow();page.setDefaultTimeout(12000);
+ page.on('pageerror',error=>errors.push(error.message));
+ await app.evaluate(({BrowserWindow})=>{const window=BrowserWindow.getAllWindows()[0];window.webContents.setBackgroundThrottling(false);window.showInactive();});
+ await page.locator('.category-nav').waitFor();
+ const initial=await page.evaluate(()=>window.desktop.getState());assert.equal(resolve(initial.dataDirectory),data);
+ const entries=initial.entries;report.entries=entries.length;
+ for(const category of categories){
+  await page.locator('.category-nav button').filter({has:page.locator('span',{hasText:exact(categoryLabels[category])})}).click();
+  await page.locator('.catalog-page:visible .catalog-filter-bar').waitFor();
+  const base=entries.filter(entry=>entry.category===category && !entry.hidden).sort(compareCatalogEntries);
+  assert.deepEqual(await shown(),base.slice(0,24).map(entry=>entry.id));
+  const fields=await page.locator('.catalog-page:visible [data-facet]:not([data-facet="status"])').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-facet')));
+  assert.deepEqual(fields,catalogQueryConfig[category].filters.map(field=>field.key));
+  assert.equal(await page.getByRole('button',{name:'筛选',exact:true}).count(),0);
+  const field=catalogQueryConfig[category].filters.find(field=>new Set(base.flatMap(entry=>facetValues(entry,field.key))).size>1)!;
+  assert(field);
+  const value=facetValues(base[0],field.key)[0];
+  await choose(page.locator(`.catalog-page:visible [data-facet="${field.key}"] .n-select`),value);
+  assert.deepEqual(await shown(),base.slice(0,24).map(entry=>entry.id));
+  await page.getByRole('button',{name:'应用筛选',exact:true}).click();
+  assert.deepEqual(await shown(),base.filter(entry=>facetValues(entry,field.key).includes(value)).slice(0,24).map(entry=>entry.id));
+  await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+  assert.deepEqual(await shown(),base.slice(0,24).map(entry=>entry.id));
+  passed(`${categoryLabels[category]}：条件直接展开，应用前保留列表，应用与清空结果正确`);
+ }
+ await page.locator('.category-nav button').filter({has:page.locator('span',{hasText:exact('机体')})}).click();
+ const target=entries.find(entry=>entry.category==='character' && !entry.hidden && entry.element && entry.profession)!;
+ await choose(page.locator('.catalog-page:visible [data-facet="element"] .n-select'),target.element);
+ await choose(page.locator('.catalog-page:visible [data-facet="profession"] .n-select'),target.profession);
+ await page.getByRole('button',{name:'应用筛选',exact:true}).click();
+ const expected=entries.filter(entry=>entry.category==='character'&&!entry.hidden&&entry.element===target.element&&entry.profession===target.profession).sort(compareCatalogEntries);
+ assert.deepEqual(await shown(),expected.slice(0,24).map(entry=>entry.id));
+ const search=page.getByPlaceholder('搜索名称、别名或关键词');
+ await search.fill(target.name);assert.deepEqual(await shown(),[target.id]);
+ const sizes=await page.locator('.catalog-page:visible .filter-fields').evaluate(element=>({width:element.clientWidth,search:element.querySelector('.catalog-search')!.getBoundingClientRect().width}));
+ assert(sizes.search<sizes.width/2);
+ await capture('01-基础资料搜索与独立筛选');
+ await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+ await page.locator('.catalog-page:visible [data-facet="element"] .n-select').click();
+ await page.locator('.catalog-page:visible [data-facet="element"] > span').click();
+ await page.locator('.n-base-select-menu:visible').waitFor({state:'hidden'});
+ await search.fill(target.name);
+ await page.locator(`.catalog-page:visible [data-entry-id="${target.id}"]`).click();
+ await page.locator('.detail-page:visible').waitFor();
+ await page.getByRole('button',{name:'返回列表',exact:true}).click();
+ assert.equal(await search.inputValue(),target.name);
+ passed('基础资料搜索与条件组合，标题空白收起下拉，详情返回保留查询');
+ await page.locator('.preset-nav button').click();
+ const presetFields=page.locator('.guide-choice-filter[aria-label="机体筛选"]');
+ const presetSearch=page.getByPlaceholder('搜索机体名称或别名');
+ assert.equal(await presetFields.locator('.guide-filter-fields .n-input').count(),1);
+ assert.equal(await presetFields.locator('.n-select').count(),7);
+ await choose(page.locator('.n-select[aria-label="机体属性筛选"]'),target.element);
+ await choose(page.locator('.n-select[aria-label="机体职业筛选"]'),target.profession);
+ const presetExpected=expected.filter(entry=>!entry.retired);
+ assert.deepEqual(await page.locator('.preset-character-card').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-character-id'))),presetExpected.map(entry=>entry.id));
+ await presetSearch.fill(target.name);
+ assert.equal(await page.locator('.preset-character-card').count(),1);
+ await capture('02-机体预设搜索并入筛选');
+ await presetFields.getByRole('button',{name:'清空筛选',exact:true}).click();
+ assert.equal(await presetSearch.inputValue(),'');
+ assert.equal(await page.locator('.preset-character-card').count(),entries.filter(entry=>entry.category==='character'&&!entry.hidden&&!entry.retired).length);
+ passed('预设搜索位于筛选网格，七个独立条件可组合且一键清空');
+ await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1000,680));
+ await capture('03-窄窗口预设筛选');
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+ await page.locator('.n-select[aria-label="机体职业筛选"]').click();
+ await page.getByRole('tab',{name:'通用预设',exact:true}).click();
+ await page.locator('.n-base-select-menu:visible').waitFor({state:'hidden'});
+ await page.locator('.category-nav button').filter({has:page.locator('span',{hasText:exact('副本')})}).click();
+ await capture('04-窄窗口副本筛选');
+ const geometry=await page.evaluate(()=>({width:innerWidth,pageWidth:document.documentElement.scrollWidth,bar:document.querySelector('.catalog-page .catalog-filter-bar')!.getBoundingClientRect().bottom,scroll:document.querySelector('.catalog-page .catalog-scroll')?.clientHeight||0}));
+ report.minimumWindow=geometry;assert(geometry.pageWidth<=geometry.width+1);assert(geometry.scroll>=90);
+ await page.getByRole('button',{name:'应用筛选',exact:true}).click({trial:true});
+ passed('窄窗口搜索和筛选自动换行，无横向溢出，切换页面收起下拉');
+ const final=await page.evaluate(()=>window.desktop.getState());
+ assert.deepEqual(final.presets,initial.presets);assert.deepEqual(final.guides,initial.guides);
+ assert.deepEqual(errors,[]);report.passed=true;
+}catch(error){report.failure=error instanceof Error?error.stack:String(error);if(app)await capture('failure').catch(()=>{});process.exitCode=1;}
+finally{
+ if(app){const child=app.process();const exited=new Promise<void>(done=>child.once('exit',()=>done()));await app.evaluate(({app})=>app.exit(0)).catch(()=>{});if(child.exitCode===null)await exited;}
+ await writeFile(join(evidence,'filters.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }

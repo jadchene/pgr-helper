@@ -422,7 +422,7 @@ export const normalizeCore = (tables: SourceTables): { entries: CatalogEntry[]; 
               kind, id: String(skillId), groupId: kind, groupName, groupOrder: active ? 1 : 2,
               familyId: `${active ? 'main' : 'passive'}:${groupId}`,
               familyName: active ? `主动技能 ${groupOrder + 1}` : plainText(text.Name),
-              typeName: active ? '主动' : '被动', level,
+              typeName: active ? '主动' : '被动', level, iconResource: plainText(text.Icon),
               ...(element ? { element } : {}),
             },
           });

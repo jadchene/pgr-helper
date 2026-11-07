@@ -2,7 +2,7 @@ import { teamPositionLabels, type FlowNode, type FlowNodeType, type FlowSkill, t
 import type { CatalogEntry } from './types';
 
 /** 流程规模限制，与编辑器和保存校验共用。 */
-export const flowLimits = { nodes: 300, depth: 8, branches: 8, qte: 60, durationSeconds: 3600 } as const;
+export const flowLimits = { nodes: 300, depth: 8, branches: 8, qte: 60 } as const;
 /** 操作类别名称，不依赖具体机体名称。 */
 export const flowNodeLabels: Record<FlowNodeType, string> = { switch: '切换机体', skill: '技能', dodge: '闪避', attack: '普攻', qte: 'QTE' };
 /** 技能操作名称。 */
@@ -49,7 +49,7 @@ interface SequenceResult {
 
 /** 新节点默认短按，不预填不存在的角色。 */
 export const createFlowNode = (type: FlowNodeType = 'attack', id: string = crypto.randomUUID()): FlowNode => ({
-  id, type, memberId: '', skill: 'red', press: 'tap', qteMemberIds: [], durationSeconds: null, notes: '', branches: [],
+  id, type, memberId: '', skill: 'red', press: 'tap', qteMemberIds: [], count: 1, group: 0, notes: '', branches: [],
 });
 
 /** 深度优先列出节点，保留来源顺序；异常重复引用只访问一次。 */
@@ -79,24 +79,19 @@ export const flowMemberName = (team: GuideTeam, entries: readonly CatalogEntry[]
   return `${teamPositionLabels[member.position]} · ${name}`;
 };
 
+/** 仅红黄蓝球、普攻和闪避支持次数。 */
+export const canRepeatFlowNode = (node: FlowNode): boolean => node.type === 'attack' || node.type === 'dodge' || node.type === 'skill' && ['red', 'yellow', 'blue'].includes(node.skill);
+/** 分组要求在所有可达轮次中都有唯一在场成员，切人独立显示。 */
+export const flowGroupActor = (node: FlowNode, contexts: Record<string, FlowNodeContext>): string => {
+  const context = contexts[node.id];
+  return node.type !== 'switch' && context && !context.unknownActive && context.activeMemberIds.length === 1 ? context.activeMemberIds[0] : '';
+};
 /** 生成完整操作标题，不合并重复 QTE。 */
 export const flowNodeTitle = (node: FlowNode, team: GuideTeam, entries: readonly CatalogEntry[]): string => {
   if (node.type === 'switch') return `切换 → ${flowMemberName(team, entries, node.memberId)}`;
-  if (node.type === 'qte') return node.qteMemberIds.length ? `QTE · ${node.qteMemberIds.length} 次` : 'QTE · 待选择';
+  if (node.type === 'qte') return node.qteMemberIds.length ? 'QTE' : 'QTE · 待选择';
   const action = node.type === 'skill' ? flowSkillLabels[node.skill] : flowNodeLabels[node.type];
-  return `${node.press === 'hold' ? '长按' : '短按'}${action}`;
-};
-
-/** 统计同时操作的最长路径时长；未填写的时间不作为零秒承诺。 */
-export const flowDuration = (flow: GuideFlow): { seconds: number; complete: boolean } => {
-  const sequenceDuration = (nodes: FlowNode[]): { seconds: number; complete: boolean } => nodes.reduce<{ seconds: number; complete: boolean }>((total, node) => {
-    const branches = node.branches.map(sequenceDuration);
-    return {
-      seconds: total.seconds + Math.max(node.durationSeconds ?? 0, ...branches.map(branch => branch.seconds)),
-      complete: total.complete && node.durationSeconds !== null && branches.every(branch => branch.complete),
-    };
-  }, { seconds: 0, complete: true });
-  return sequenceDuration(flow.nodes);
+  return `${node.press === 'hold' ? '长按' : ''}${action}${canRepeatFlowNode(node) && node.count > 1 ? ` × ${node.count}` : ''}`;
 };
 
 /** 推导并行分支和循环中的全部可能在场角色，检查 QTE 与角色引用。 */
@@ -129,6 +124,9 @@ export const analyzeGuideFlow = (flow: GuideFlow, team: GuideTeam, options: Flow
       structurallySafe = false;
     }
     nodeIds.add(node.id);
+    if (!Number.isInteger(node.count) || node.count < 1 || node.count > 999) issue(path, '操作次数应为 1 至 999 的整数。');
+    if (!canRepeatFlowNode(node) && node.count !== 1) issue(path, '当前操作不支持重复次数字段。');
+    if (!Number.isInteger(node.group) || node.group < 0) issue(path, '节点分组编号无效。');
     if (depth > flowLimits.depth) {
       issue(path, `并行操作最多嵌套 ${flowLimits.depth} 层。`);
       structurallySafe = false;
@@ -138,7 +136,6 @@ export const analyzeGuideFlow = (flow: GuideFlow, team: GuideTeam, options: Flow
       structurallySafe = false;
     }
     if (node.qteMemberIds.length > flowLimits.qte) issue(path, `一个 QTE 节点最多记录 ${flowLimits.qte} 次触发。`);
-    if (node.durationSeconds !== null && (!Number.isFinite(node.durationSeconds) || node.durationSeconds < 0 || node.durationSeconds > flowLimits.durationSeconds)) issue(path, `节点时长应为 0 至 ${flowLimits.durationSeconds} 秒。`);
     if (node.branches.some(branch => !branch.length)) required(path, '并行分支为空，请添加操作或移除此分支。');
   }
   const starterValid = validMembers.has(team.starterMemberId);
@@ -218,19 +215,67 @@ export const analyzeGuideFlow = (flow: GuideFlow, team: GuideTeam, options: Flow
     return { state: current, switched, lastTargets, unknownLast };
   };
 
-  let starts = initial;
-  let end = initial;
+  const loopIndex = flow.loopStartId ? flow.nodes.findIndex(node => node.id === flow.loopStartId) : 0;
+  if (flow.mode === 'loop' && loopIndex < 0) {
+    issue('flow.loopStartId', '循环入口已删除或不在主流程，请重新选择。');
+  }
+  const startup = flow.mode === 'loop' ? flow.nodes.slice(0, Math.max(0, loopIndex)) : [];
+  const repeated = flow.mode === 'loop' ? flow.nodes.slice(Math.max(0, loopIndex)) : flow.nodes;
+  let starts = runSequence(startup, initial, emptyState()).state;
+  let end = starts;
   // 队伍人数有限，单调合并循环入口后最多经过人数加两轮即可达到稳定状态。
   for (let iteration = 0; iteration < (flow.mode === 'loop' ? validMembers.size + 2 : 1); iteration++) {
-    end = runSequence(flow.nodes, starts, emptyState()).state;
+    end = runSequence(repeated, starts, emptyState()).state;
     if (flow.mode !== 'loop') break;
     const next = union(starts, end);
     if (next.ids.size === starts.ids.size && next.unknown === starts.unknown) break;
     starts = next;
   }
   for (const context of Object.values(contexts)) context.qteMemberIds = context.unknownActive ? [] : [...validMembers].filter(id => !context.activeMemberIds.includes(id));
+  const groups = new Map<number, { actor: string; sequence: FlowNode[]; index: number }>();
+  for (const location of locations) {
+    const { node, sequence, index } = location;
+    if (!node.group) continue;
+    const actor = flowGroupActor(node, contexts);
+    const previous = groups.get(node.group);
+    if (!actor) issue(`flow.nodes.${node.id}`, '分组仅限在场机体确定的普通节点，切人节点需独立。');
+    if (previous && (previous.actor !== actor || previous.sequence !== sequence || previous.index + 1 !== index || sequence[index - 1].branches.length || flow.mode === 'loop' && flow.loopStartId === node.id)) issue(`flow.nodes.${node.id}`, '同组节点必须连续且在场机体相同，不能跨分支、切人或循环入口。');
+    groups.set(node.group, { actor, sequence, index });
+  }
   return { issues, contexts, endMemberIds: [...end.ids], unknownEnd: end.unknown };
 };
 
 /** 主进程和渲染进程共用同一套流程规则。 */
 export const validateGuideFlow = (flow: GuideFlow, team: GuideTeam, options: FlowValidationOptions = {}): GuideIssue[] => analyzeGuideFlow(flow, team, options).issues;
+
+/** 编辑后拆开被切人、移动、分支或循环入口隔断的组，不改变节点顺序。 */
+export const normalizeFlowGroups = (flow: GuideFlow, team: GuideTeam): void => {
+  const { contexts } = analyzeGuideFlow(flow, team, { allowIncomplete: true });
+  const locations = flattenFlowNodes(flow);
+  let next = Math.max(0, ...locations.map(item => item.node.group || 0));
+  const used = new Set<number>();
+  const visit = (nodes: FlowNode[]): void => {
+    let original = 0;
+    let assigned = 0;
+    let previous: FlowNode | undefined;
+    for (const node of nodes) {
+      const requested = node.group;
+      const actor = flowGroupActor(node, contexts);
+      if (!requested || !actor) { node.group = 0; original = 0; assigned = 0; }
+      else {
+        const continues = requested === original && previous && !previous.branches.length && actor === flowGroupActor(previous, contexts) && !(flow.mode === 'loop' && flow.loopStartId === node.id);
+        if (!continues) { assigned = used.has(requested) ? ++next : requested; used.add(assigned); }
+        if (assigned !== requested && flow.groupNotes?.[requested]) flow.groupNotes[assigned] = flow.groupNotes[requested];
+        node.group = assigned;
+        original = requested;
+      }
+      node.branches.forEach(visit);
+      previous = node;
+    }
+  };
+  visit(flow.nodes);
+  if (flow.groupNotes) {
+    const active = new Set(locations.map(item => String(item.node.group)));
+    for (const key of Object.keys(flow.groupNotes)) if (!active.has(key)) delete flow.groupNotes[key];
+  }
+};

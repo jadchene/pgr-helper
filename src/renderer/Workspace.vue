@@ -32,6 +32,7 @@ import EntryEditor from "./components/EntryEditor.vue";
 import SyncPage from "./components/SyncPage.vue";
 import SettingsPage from "./components/SettingsPage.vue";
 import GuidesPage from "./components/GuidesPage.vue";
+import PresetsPage from "./components/PresetsPage.vue";
 
 defineProps<{ isDark: boolean }>();
 const emit = defineEmits<{ themeChange: [theme: AppSettings["theme"]]; fontChange: [family: string] }>();
@@ -41,7 +42,7 @@ const state = ref<AppState | null>(null);
 const loading = ref(true);
 const bootError = ref("");
 /** 工作台侧栏对应的列表及管理页面。 */
-type WorkspaceRoute = Category | "sync" | "settings" | "trash" | "guides";
+type WorkspaceRoute = Category | "sync" | "settings" | "trash" | "guides" | "presets";
 const route = ref<WorkspaceRoute>("character");
 const selectedId = ref("");
 const selectedEntry = computed(
@@ -118,13 +119,14 @@ const navigateDirect = (destination: WorkspaceRoute) => {
 };
 /** 离开攻略编辑时明确处理尚未保存的配置。 */
 const navigate = (destination: WorkspaceRoute) => {
-  if (guidePending.value) { message.info('正在保存攻略，请稍候。'); return; }
+  if (destination === 'presets' && route.value === 'presets') return;
+  if (guidePending.value) { message.info('正在保存配置，请稍候。'); return; }
   const finish = () => {
     if (destination === 'guides') guideRequest.value = { token: guideRequest.value.token + 1 };
     navigateDirect(destination);
   };
   if (guideDirty.value) {
-    dialog.warning({ title: '放弃未保存的攻略修改？', content: '本次配置和流程修改尚未保存。', positiveText: '放弃修改', negativeText: '继续编辑', onPositiveClick: () => { guideDirty.value = false; finish(); } });
+    dialog.warning({ title: route.value === 'presets' ? '放弃未保存的预设修改？' : '放弃未保存的攻略修改？', content: '本次修改尚未保存。', positiveText: '放弃修改', negativeText: '继续编辑', onPositiveClick: () => { guideDirty.value = false; finish(); } });
     return;
   }
   finish();
@@ -396,7 +398,7 @@ const importBackup = () => {
   dialog.warning({
     title: "从备份恢复资料？",
     content:
-      "恢复会替换当前的基础资料、攻略、本地编辑和设置。应用会先自动备份当前数据库，再恢复你选择的文件。",
+      "恢复会替换当前的基础资料、攻略、配置预设、本地编辑和设置。应用会先自动备份当前数据库，再恢复你选择的文件。",
     positiveText: "选择备份文件",
     negativeText: "取消",
     onPositiveClick: async () => {
@@ -573,6 +575,7 @@ onUnmounted(() => {
         </nav>
         <div class="sidebar-label manage-label">攻略记录</div>
         <nav class="guide-nav" aria-label="攻略导航"><button :class="['nav-item', { active: route === 'guides' }]" @click="navigate('guides')"><BookOpen :size="17" /><span>副本攻略</span><small>{{ state.guides.filter(guide => !guide.hidden).length }}</small></button></nav>
+        <nav class="preset-nav" aria-label="预设导航"><button :class="['nav-item', { active: route === 'presets' }]" @click="navigate('presets')"><BookOpen :size="17" /><span>配置预设</span><small>{{ state.presets.filter(preset => !preset.hidden).length }}</small></button></nav>
         <div class="sidebar-label manage-label">资料管理</div>
         <nav class="utility-nav" aria-label="管理导航">
           <button
@@ -671,7 +674,8 @@ onUnmounted(() => {
           @export-backup="exportBackup"
           @import-backup="importBackup"
         />
-        <GuidesPage v-else-if="route === 'guides'" :entries="state.entries" :guides="state.guides" :request="guideRequest" @refresh="refreshGuides" @dirty="guideDirty = $event" @pending="guidePending = $event" />
+        <GuidesPage v-else-if="route === 'guides'" :entries="state.entries" :guides="state.guides" :presets="state.presets" :request="guideRequest" @refresh="refreshGuides" @dirty="guideDirty = $event" @pending="guidePending = $event" />
+        <PresetsPage v-else-if="route === 'presets'" :entries="state.entries" :presets="state.presets" @refresh="refreshGuides" @dirty="guideDirty = $event" @pending="guidePending = $event" />
       </main>
       <EntryEditor
         v-if="editor"

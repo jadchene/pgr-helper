@@ -145,9 +145,8 @@ try {
   await page.getByPlaceholder('搜索名称、别名或关键词').clear();
   passed('搜索与完整技能详情');
 
-  await page.getByRole('button', { name: '筛选', exact: true }).click();
   const beforeFilter = await page.locator('.pagination-bar').innerText();
-  await page.locator('.filter-panel .n-select').first().click();
+  await page.locator('.catalog-filter-bar .n-select').first().click();
   await page.locator('.n-base-select-option').filter({ hasText: /^雷$/ }).click();
   assert.equal(await page.locator('.pagination-bar').innerText(), beforeFilter);
   await page.getByRole('button', { name: '应用筛选', exact: true }).click();

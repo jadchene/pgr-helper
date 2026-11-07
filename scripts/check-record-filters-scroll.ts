@@ -1,0 +1,86 @@
+import {_electron as electron, expect} from '@playwright/test';import assert from 'node:assert/strict';import {mkdir,writeFile} from 'node:fs/promises';import {resolve} from 'node:path';
+const root=resolve(import.meta.dirname,'..'),dir=resolve(process.env.PGR_EVIDENCE_DIR || resolve(root, 'test-results/record-filters-scroll'));await mkdir(dir,{recursive:true});const env:Record<string,string>=Object.fromEntries(Object.entries(process.env).filter((item):item is [string,string]=>typeof item[1]==='string'));delete env.PGR_DATA_DIR;delete env.PGR_DEV_URL;delete env.ELECTRON_RUN_AS_NODE;env.PGR_TEST_HIDDEN='1';const app=await electron.launch({args:[root],cwd:root,env});const checks:string[]=[];const errors:string[]=[];
+try{const page=await app.firstWindow();page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));await app.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);w.showInactive();w.unmaximize();});await page.locator('.guide-nav').waitFor();const before=await page.evaluate(()=>window.desktop.getState());assert.equal(resolve(before.dataDirectory),resolve(root,'data'));
+const capture=async(name:string)=>{await page.waitForTimeout(250);const png=await app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].capturePage()).toPNG().toString('base64'));await writeFile(resolve(dir,name+'.png'),Buffer.from(png,'base64'));};
+
+const choose = async (label: string, value: string) => {
+  await page.getByLabel(label, {exact:true}).click();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.insertText(value);
+  await page.locator('.n-base-select-menu:visible').getByText(value, {exact:true}).click();
+};
+await page.locator('.guide-nav button').click();
+const chosenGuide=before.guides.find(g=>!g.hidden&&g.team.members.some(m=>m.characterId))!;
+const characterId=chosenGuide.team.members.find(m=>m.characterId)!.characterId;
+await choose('队伍机体筛选',before.entries.find(e=>e.id===characterId)!.name);
+assert.equal(await page.locator('[data-guide-id]').count(),before.guides.filter(g=>!g.hidden&&g.team.members.some(m=>m.characterId===characterId)).length);
+await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+const guideCount=before.guides.filter(g=>!g.hidden).length;
+assert.equal(await page.locator('[data-guide-id]').count(),guideCount);
+await choose('状态筛选','草稿');
+assert.equal(await page.locator('[data-guide-id]').count(),before.guides.filter(g=>!g.hidden&&g.status==='draft').length);
+await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+await choose('流程类型筛选','包含循环');
+assert.equal(await page.locator('[data-guide-id]').count(),before.guides.filter(g=>!g.hidden&&g.flow.mode==='loop').length);
+await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+await page.getByLabel('筛选关键词',{exact:true}).fill('不存在的攻略');
+assert.equal(await page.locator('[data-guide-id]').count(),0);
+await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+await page.getByLabel('状态筛选',{exact:true}).click();
+await page.locator('h1').click();
+await expect(page.locator('.n-base-select-menu:visible')).toHaveCount(0);
+await capture('攻略筛选');
+checks.push('攻略状态、流程类型、关键词、清空和空白关闭菜单通过');
+for (const id of ['guide:demo-single-sequence','guide:demo-loop-sequence']) {
+  await page.locator('[data-guide-id="'+id+'"]').click();
+  const outer=page.locator('.guide-detail-content');
+  const canvas=page.locator('.flow-view-canvas');
+  await canvas.scrollIntoViewIfNeeded();
+  assert(await page.locator('.flow-node-portraits .entry-artwork').count());
+  await canvas.evaluate(el=>{el.scrollTop=0;});
+  const prior=await outer.evaluate(el=>el.scrollTop);assert(prior>0);
+  const box=await canvas.boundingBox();assert(box);
+  const viewport=await page.evaluate(()=>innerHeight);
+  await page.mouse.move(box.x+15,Math.min(box.y+60,viewport-40));
+  await page.mouse.wheel(0,-300);
+  await page.waitForTimeout(500);
+  assert(await outer.evaluate(el=>el.scrollTop)<prior,'流程顶部滚轮必须传给页面：'+id);
+  await canvas.scrollIntoViewIfNeeded();
+  if(id.includes('loop')) {
+    const box2=await canvas.boundingBox();assert(box2);
+    await page.mouse.move(box2.x+15,Math.min(box2.y+60,viewport-40));
+    await page.mouse.wheel(0,300);await page.waitForTimeout(500);
+    assert(await canvas.evaluate(el=>el.scrollTop)>0,'长流程内部应滚动');
+  }
+  await capture(id.replaceAll(':','-'));
+  await page.getByRole('button',{name:'返回列表',exact:true}).click();
+}
+checks.push('实际滚轮验证：单轮与循环流程顶部向上滚动均传给页面，长流程内部正常滚动；节点机体图标存在');
+await page.locator('.preset-nav button').click();await page.getByRole('tab',{name:'通用预设',exact:true}).click();
+await choose('预设类型筛选','意识预设');
+assert.equal(await page.locator('[data-preset-kind="pet"]').count(),0);
+assert.equal(await page.locator('[data-preset-id]').count(),before.presets.filter(p=>!p.hidden&&p.kind==='memory').length);
+await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+await choose('预设类型筛选','辅助机预设');
+assert.equal(await page.locator('[data-preset-kind="memory"]').count(),0);
+assert.equal(await page.locator('[data-preset-id]').count(),before.presets.filter(p=>!p.hidden&&p.kind==='pet').length);
+await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+await page.getByLabel('筛选关键词',{exact:true}).fill('不存在的预设');assert.equal(await page.locator('[data-preset-id]').count(),0);
+await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+const memoryPreset=before.presets.find(p=>!p.hidden&&p.kind==='memory');
+assert(memoryPreset?.kind==='memory');
+const memoryId=memoryPreset.memory.memories[0].memoryId;
+await choose('包含意识筛选',before.entries.find(e=>e.id===memoryId)!.name);
+assert.equal(await page.locator('[data-preset-id]').count(),before.presets.filter(p=>!p.hidden&&p.kind==='memory'&&(p.memory.memories.some(m=>m.memoryId===memoryId)||p.memory.harmonizationMemoryId===memoryId)).length);
+await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+const petPreset=before.presets.find(p=>!p.hidden&&p.kind==='pet');assert(petPreset?.kind==='pet');
+await choose('辅助机筛选',before.entries.find(e=>e.id===petPreset.pet.petId)!.name);
+assert.equal(await page.locator('[data-preset-id]').count(),before.presets.filter(p=>!p.hidden&&p.kind==='pet'&&p.pet.petId===petPreset.pet.petId).length);
+await page.getByRole('button',{name:'清空筛选',exact:true}).click();
+await capture('通用预设筛选');
+await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1000,680));
+await capture('通用预设筛选-窄窗口');
+assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+checks.push('通用预设分类、关键词、清空通过');
+const after=await page.evaluate(()=>window.desktop.getState());assert.deepEqual(after.presets,before.presets);assert.deepEqual(after.guides,before.guides);assert.deepEqual(errors,[]);console.log(JSON.stringify({checks,errors}));
+}finally{await writeFile(resolve(dir,'checks.json'),JSON.stringify({checks,errors},null,2));await app.close();}

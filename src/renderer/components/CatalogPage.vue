@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import DictionaryBadge from './DictionaryBadge.vue';
+import { useCatalogSelectLabel } from '../catalog-select-label';
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { NButton, NInput, NSelect, NPopover, NPagination } from "naive-ui";
 import {
   Search,
-  SlidersHorizontal,
   LayoutGrid,
   List,
   Plus,
@@ -30,6 +31,7 @@ const props = defineProps<{
   hasSourceData: boolean;
   active?: boolean;
 }>();
+const { renderFacetLabel } = useCatalogSelectLabel(() => props.entries);
 const emit = defineEmits<{
   inspect: [entry: EntryView];
   edit: [entry: EntryView];
@@ -41,21 +43,25 @@ const emit = defineEmits<{
 const search = ref("");
 const page = ref(1);
 const pageSize = ref(24);
-const filterOpen = ref(false);
 const orderHelpOpen = ref(false);
 const orderMenuOpen = ref(false);
 const activeFilterDropdown = ref<string | null>(null);
 /** 一个筛选面板只展开一个下拉菜单，保留输入框本身的搜索交互。 */
 const updateFilterDropdown = (key: string, open: boolean) => {
-  if (open) activeFilterDropdown.value = filterOpen.value ? key : null;
+  if (open) { activeFilterDropdown.value = key; orderMenuOpen.value = false; orderHelpOpen.value = false; }
   else if (activeFilterDropdown.value === key) activeFilterDropdown.value = null;
 };
 /** 锚点随滚动或窗口变化移动时收起菜单，避免它追随已不可见的输入框。 */
 const closeFilterDropdown = () => {
   activeFilterDropdown.value = null;
 };
-onMounted(() => window.addEventListener('resize', closeFilterDropdown));
-onUnmounted(() => window.removeEventListener('resize', closeFilterDropdown));
+/** 页面移动时收起浮层，选项内部滚动不收起。 */
+const onPageScroll = (event: Event) => {
+  if (event.target instanceof Element && event.target.closest('.n-base-select-menu, .n-base-selection')) return;
+  closeFilterDropdown();
+};
+onMounted(() => { window.addEventListener('resize', closeFilterDropdown); window.addEventListener('scroll', onPageScroll, true); });
+onUnmounted(() => { window.removeEventListener('resize', closeFilterDropdown); window.removeEventListener('scroll', onPageScroll, true); });
 /** 分类切换、清空与首次进入使用相同的空条件。 */
 const emptyFilters = () => ({ facets: {} as Record<string, string | null>, status: 'all' });
 const filters = ref(emptyFilters());
@@ -142,19 +148,14 @@ watch(
     filters.value = emptyFilters();
     draft.value = emptyFilters();
     sortOrder.value = 'source';
-    filterOpen.value = false;
+    closeFilterDropdown();
     orderHelpOpen.value = false;
     orderMenuOpen.value = false;
   },
 );
-watch(filterOpen, (open) => {
-  closeFilterDropdown();
-  if (open) draft.value = { status: filters.value.status, facets: { ...filters.value.facets } };
-});
 /** 进入详情页时收起传送到页面外层的筛选浮层。 */
 watch(() => props.active, (active) => {
   if (active === false) {
-    filterOpen.value = false;
     orderHelpOpen.value = false;
     orderMenuOpen.value = false;
     closeFilterDropdown();
@@ -163,10 +164,11 @@ watch(() => props.active, (active) => {
 /** 显式应用筛选草稿，填写过程中不改变资料列表。 */
 const applyFilters = () => {
   filters.value = { status: draft.value.status, facets: { ...draft.value.facets } };
-  filterOpen.value = false;
+  closeFilterDropdown();
 };
 /** 清除已应用条件及待应用草稿。 */
 const clearFilters = () => {
+  closeFilterDropdown();
   search.value = "";
   filters.value = emptyFilters();
   draft.value = emptyFilters();
@@ -198,87 +200,26 @@ const clearFilters = () => {
         ><template #icon><Plus :size="16" /></template>新增资料</n-button
       >
     </header>
-    <div class="catalog-toolbar">
-      <n-input
-        v-model:value="search"
-        class="catalog-search"
-        clearable
-        placeholder="搜索名称、别名或关键词"
-        aria-label="搜索资料"
-        ><template #prefix><Search :size="16" /></template
-        ><template #suffix><kbd v-if="!search">Ctrl K</kbd></template></n-input
-      >
-      <div class="catalog-order">
-        <n-select v-model:value="sortOrder" v-model:show="orderMenuOpen" :options="sortOptions" aria-label="排序方式" />
-        <n-popover v-model:show="orderHelpOpen" trigger="click" placement="bottom-end" :width="300">
-          <template #trigger><button class="inline-icon" aria-label="查看排序依据" title="排序依据"><Info :size="16" /></button></template>
-          <div class="order-help">{{ queryConfig.orderHelp }}</div>
-        </n-popover>
-      </div>
-      <n-popover
-        v-model:show="filterOpen"
-        trigger="click"
-        placement="bottom-end"
-        :show-arrow="false"
-        :width="320"
-      >
-        <template #trigger
-          ><n-button
-            :type="filterCount ? 'primary' : 'default'"
-            :secondary="!!filterCount"
-            ><template #icon><SlidersHorizontal :size="15" /></template
-            >筛选<span v-if="filterCount" class="filter-count">{{
-              filterCount
-            }}</span></n-button
-          ></template
-        >
-        <div class="filter-panel">
-          <strong>{{ title }}筛选</strong>
-          <div class="filter-fields" @scroll.passive="closeFilterDropdown">
-            <div v-for="field in filterFields" :key="field.key" class="filter-field" :data-facet="field.key">
-              <span :id="`catalog-filter-${field.key}-label`">{{ field.label }}</span>
-              <n-select v-model:value="draft.facets[field.key]" :options="field.options" clearable filterable
-                :show="filterOpen && activeFilterDropdown === field.key"
-                @update:show="(open) => updateFilterDropdown(field.key, open)"
-                :input-props="{ 'aria-labelledby': `catalog-filter-${field.key}-label` }"
-                :placeholder="`全部${field.label}`" :aria-label="field.label" />
-            </div>
-            <div class="filter-field" data-facet="status">
-              <span id="catalog-filter-status-label">本地状态</span><n-select
-              v-model:value="draft.status"
-              :options="statusOptions"
-              :show="filterOpen && activeFilterDropdown === 'status'"
-              @update:show="(open) => updateFilterDropdown('status', open)"
-              aria-labelledby="catalog-filter-status-label"
-          /></div>
-          </div>
-          <div class="filter-actions">
-            <n-button
-              quaternary
-              @click="draft = emptyFilters()"
-              >清空</n-button
-            ><n-button type="primary" @click="applyFilters">应用筛选</n-button>
-          </div>
+    <section class="catalog-filter-bar" aria-label="资料筛选">
+      <div class="filter-fields">
+        <div class="filter-field catalog-search-field"><span>名称／别名</span><n-input v-model:value="search" class="catalog-search" clearable placeholder="搜索名称、别名或关键词" aria-label="搜索资料"><template #prefix><Search :size="16" /></template></n-input></div>
+        <div v-for="field in filterFields" :key="field.key" class="filter-field" :data-facet="field.key">
+          <span :id="`catalog-filter-${field.key}-label`">{{ field.label }}</span>
+          <n-select v-model:value="draft.facets[field.key]" :options="field.options" :render-label="option => renderFacetLabel(field.key, option)" clearable filterable
+            :show="activeFilterDropdown === field.key" @update:show="open => updateFilterDropdown(field.key, open)"
+            :input-props="{ 'aria-labelledby': `catalog-filter-${field.key}-label` }"
+            :placeholder="`全部${field.label}`" :aria-label="field.label" />
         </div>
-      </n-popover>
-      <div class="view-switch" aria-label="展示方式">
-        <button
-          :class="{ active: viewMode === 'grid' }"
-          title="卡片视图"
-          aria-label="卡片视图"
-          @click="emit('viewMode', 'grid')"
-        >
-          <LayoutGrid :size="17" /></button
-        ><button
-          :class="{ active: viewMode === 'list' }"
-          title="列表视图"
-          aria-label="列表视图"
-          @click="emit('viewMode', 'list')"
-        >
-          <List :size="18" />
-        </button>
+        <div class="filter-field" data-facet="status"><span id="catalog-filter-status-label">本地状态</span><n-select v-model:value="draft.status" :options="statusOptions" :show="activeFilterDropdown === 'status'" @update:show="open => updateFilterDropdown('status', open)" aria-labelledby="catalog-filter-status-label" /></div>
       </div>
-    </div>
+      <div class="catalog-toolbar">
+        <div class="filter-actions"><n-button @click="clearFilters">清空筛选</n-button><n-button type="primary" @click="applyFilters">应用筛选</n-button></div>
+        <div class="catalog-order"><n-select v-model:value="sortOrder" v-model:show="orderMenuOpen" :options="sortOptions" aria-label="排序方式" />
+          <n-popover v-model:show="orderHelpOpen" trigger="click" placement="bottom-end" :width="300"><template #trigger><button class="inline-icon" aria-label="查看排序依据" title="排序依据"><Info :size="16" /></button></template><div class="order-help">{{ queryConfig.orderHelp }}</div></n-popover>
+        </div>
+        <div class="view-switch" aria-label="展示方式"><button :class="{ active: viewMode === 'grid' }" title="卡片视图" aria-label="卡片视图" @click="emit('viewMode', 'grid')"><LayoutGrid :size="17" /></button><button :class="{ active: viewMode === 'list' }" title="列表视图" aria-label="列表视图" @click="emit('viewMode', 'list')"><List :size="18" /></button></div>
+      </div>
+    </section>
     <div v-if="search || filterCount" class="filter-summary">
       <span>找到 {{ matches.length.toLocaleString() }} 条资料</span
       ><button class="text-button" @click="clearFilters">
@@ -322,10 +263,8 @@ const clearFilters = () => {
               v-if="entry.element"
               class="element-tag"
               :data-element="entry.element"
-              >{{ entry.element }}</span
-            ><span v-if="entry.profession" class="neutral-tag">{{
-              entry.profession
-            }}</span
+              ><DictionaryBadge :entries="entries" :value="entry.element" type="属性" /></span
+            ><span v-if="entry.profession" class="neutral-tag"><DictionaryBadge :entries="entries" :value="entry.profession" type="职业" /></span
             ><span
               v-for="tag in entry.tags
                 .filter(
@@ -334,7 +273,7 @@ const clearFilters = () => {
                 .slice(0, 2)"
               :key="tag"
               class="neutral-tag"
-              >{{ tag }}</span
+              ><DictionaryBadge :entries="entries" :value="tag" type="队伍效应" /></span
             >
           </div>
           <footer class="card-footer">
@@ -407,7 +346,7 @@ const clearFilters = () => {
               v-if="entry.element"
               class="element-tag"
               :data-element="entry.element"
-              >{{ entry.element }}</span
+              ><DictionaryBadge :entries="entries" :value="entry.element" type="属性" /></span
             ><span class="neutral-tag">{{
               entry.profession || entry.rarity || categoryLabels[entry.category]
             }}</span>

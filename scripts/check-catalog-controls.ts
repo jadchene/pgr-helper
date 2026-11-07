@@ -52,7 +52,7 @@ const navigate = async (category: Category): Promise<void> => {
   await page.locator('.category-nav button').filter({ has: page.locator('span', { hasText: exact(categoryLabels[category]) }) }).click();
   await page.locator('.catalog-page .page-heading h1').filter({ hasText: categoryLabels[category] }).waitFor();
   await settle();
-  assert.equal(await page.locator('.filter-panel:visible').count(), 0);
+  assert.equal(await page.locator('.n-base-select-menu:visible').count(), 0);
 };
 
 /** 直接读取渲染出的条目标识、名称与可见计数，不访问 Vue 组件内部状态。 */
@@ -80,9 +80,8 @@ const expectResult = async (items: CatalogEntry[], pageNumber = 1): Promise<void
 
 /** 打开筛选面板，并校验当前分类独有的字段名称和顺序。 */
 const openFilters = async (category: Category): Promise<void> => {
-  await page.locator('.catalog-toolbar').getByRole('button', { name: /^筛选/ }).click();
-  await page.locator('.filter-panel').waitFor({ state: 'visible' });
-  const fields = await page.locator('.filter-panel [data-facet]:not([data-facet="status"])').evaluateAll(elements => elements.map(element => ({
+  await page.locator('.catalog-filter-bar').waitFor({ state: 'visible' });
+  const fields = await page.locator('.catalog-filter-bar [data-facet]:not([data-facet="status"])').evaluateAll(elements => elements.map(element => ({
     key: element.getAttribute('data-facet'),
     label: element.querySelector(':scope > span')?.textContent?.trim(),
   })));
@@ -91,7 +90,7 @@ const openFilters = async (category: Category): Promise<void> => {
 
 /** 在可搜索下拉框中通过用户操作选择明确存在的筛选值。 */
 const chooseFacet = async (key: string, value: string): Promise<void> => {
-  const select = page.locator(`.filter-panel [data-facet="${key}"] .n-select`);
+  const select = page.locator(`.catalog-filter-bar [data-facet="${key}"] .n-select`);
   await select.click();
   await select.locator('input').fill(value);
   await page.locator('.n-base-select-option:visible').filter({ hasText: exact(value) }).click();
@@ -101,7 +100,7 @@ const chooseFacet = async (key: string, value: string): Promise<void> => {
 /** 点击面板外部，关闭草稿但不触发应用。 */
 const dismissFilters = async (): Promise<void> => {
   await page.locator('.catalog-page .page-heading h1').click();
-  await page.locator('.filter-panel').waitFor({ state: 'hidden' });
+  await page.locator('.n-base-select-menu:visible').waitFor({ state: 'hidden' });
   await settle();
 };
 
@@ -221,8 +220,7 @@ try {
       await expectResult(items);
       await dismissFilters();
       await openFilters(category);
-      await page.locator(`.filter-panel [data-facet="${key}"] .n-base-selection-placeholder`).waitFor({ state: 'visible' });
-      await chooseFacet(key, subset.value);
+      assert((await page.locator(`.catalog-filter-bar [data-facet="${key}"]`).innerText()).includes(subset.value));
       await page.getByRole('button', { name: '应用筛选', exact: true }).click();
       await expectResult(subset.matches);
       assert.equal(await page.locator('.filter-summary > span').innerText(), `找到 ${subset.matches.length.toLocaleString()} 条资料`);
@@ -236,14 +234,15 @@ try {
       await page.locator('.entry-card').first().waitFor();
       await expectResult(subset.matches);
       await openFilters(category);
-      await page.locator('.filter-actions').getByRole('button', { name: '清空', exact: true }).click();
+      await page.locator('.filter-actions').getByRole('button', { name: '清空筛选', exact: true }).click();
       await settle();
-      await expectResult(subset.matches);
-      await dismissFilters();
+      await expectResult(items);
+      await chooseFacet(key, subset.value);
+      await page.getByRole('button', { name: '应用筛选', exact: true }).click();
       await expectResult(subset.matches);
       await page.screenshot({ path: join(evidence, `${category}-已应用专属筛选.png`), animations: 'disabled' });
       await nameOrder(subset.matches);
-      passed(`${categoryLabels[category]}：默认排序、专属标签、草稿应用与丢弃、清空待应用、名称排序、卡片列表一致`, {
+      passed(`${categoryLabels[category]}：默认排序、专属标签、草稿应用与保留、清空重置、名称排序、卡片列表一致`, {
         category, facet: key, selected: subset.value, total: items.length, filtered: subset.matches.length,
         multiValueVisibleIds: subset.multi, sourceFirstPage: items.slice(0, 24).map(item => item.id),
       });
@@ -298,7 +297,7 @@ try {
     const fields = document.querySelector<HTMLElement>('.filter-fields')!;
     const a = actions.getBoundingClientRect();
     const t = toolbar.getBoundingClientRect();
-    const panel = document.querySelector<HTMLElement>('.filter-panel')!.getBoundingClientRect();
+    const panel = document.querySelector<HTMLElement>('.catalog-filter-bar')!.getBoundingClientRect();
     return {
       viewport: [innerWidth, innerHeight], toolbarScrollWidth: toolbar.scrollWidth, toolbarClientWidth: toolbar.clientWidth,
       pageScrollWidth: document.documentElement.scrollWidth,
@@ -313,7 +312,7 @@ try {
   assert(geometry.pageScrollWidth <= geometry.viewport[0], '最小窗口页面横向溢出');
   assert(geometry.toolbarScrollWidth <= geometry.toolbarClientWidth + 1 && geometry.toolbarChildrenInside, '最小窗口工具栏横向溢出');
   assert(geometry.actions.left >= 0 && geometry.actions.right <= geometry.viewport[0] && geometry.actions.top >= 0 && geometry.actions.bottom <= geometry.viewport[1], '最小窗口筛选底部按钮超出可视范围');
-  assert(geometry.scrollableFields, '副本长筛选面板应限制高度并允许内部滚动');
+  assert(!geometry.scrollableFields, '展开筛选应完整排列，不藏在滚动面板中');
   await page.getByRole('button', { name: '应用筛选', exact: true }).click({ trial: true });
   passed('1000×680 最小窗口长筛选面板底部可操作，工具栏无横向溢出', geometry);
   await dismissFilters();

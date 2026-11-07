@@ -112,8 +112,8 @@
 .guide-member-editor-heading { margin-bottom: 12px; }
 .guide-member-editor-heading h3 { margin: 0; font-size: 16px; }
 .guide-team-empty { padding: 38px 18px; text-align: center; color: var(--muted); background: var(--subtle); border: 1px dashed var(--border); border-radius: 8px; font-size: 13px; }
-.guide-config-section { margin-bottom: 22px; padding: 17px; border: 1px solid var(--border); border-radius: 9px; min-width: 0; }
-.guide-config-section h4 { margin: 0 0 14px; font-size: 13px; }
+.guide-config-section { background: var(--surface); margin-bottom: 16px; padding: 17px; border: 1px solid var(--border); border-radius: 9px; min-width: 0; }
+.guide-config-section h4 { margin: 0 0 14px; font-size: 15px; }
 .guide-config-section h4 > small { margin-left: 7px; color: var(--muted); font-weight: 400; font-size: 11px; }
 .guide-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
 .guide-preset-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
@@ -130,7 +130,7 @@
 .guide-resonance-side .guide-allocation-row { grid-template-columns: minmax(0, 1fr) 91px 28px; gap: 5px; }
 .guide-weapon-resonance-editor { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .guide-effect-details { margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
-.guide-effect-details summary { cursor: pointer; color: var(--muted); }
+.guide-effect-details summary { cursor: default; color: var(--muted); }
 .guide-effect-details > div { margin-top: 14px; }
 .guide-effect-details > div:first-of-type { margin-top: 11px; }
 .guide-effect-details p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; margin: 8px 0 0; }
@@ -152,3 +152,11 @@
   .guide-team-global-fields { grid-template-columns: minmax(0, 1fr); }
   .guide-team-member-tabs > button { padding: 9px 7px; }
 }
+
+.guide-quick-swap { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 12px; }
+.guide-quick-swap > span { color: var(--muted); margin-right: auto; }
+
+.guide-config-jump { display: flex; gap: 6px; flex-wrap: wrap; position: sticky; top: 0; z-index: 2; padding: 8px 0; background: var(--app); }
+.guide-config-jump button { padding: 6px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); }
+.guide-config-jump button:hover, .guide-config-jump button:focus-visible { color: var(--accent-text); border-color: var(--accent); }
+.guide-config-section { scroll-margin-top: 52px; }

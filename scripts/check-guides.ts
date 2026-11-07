@@ -8,7 +8,7 @@ import { CatalogStore } from '../src/main/store';
 import { buildGuideFixture, loadGuideSnapshot } from '../tests/helpers/guide-fixture';
 import { teamPositionLabels, type FlowNodeType, type GuideMember, type GuideRecord } from '../src/shared/guides';
 import { flattenFlowNodes, flowNodeLabels, flowSkillLabels } from '../src/shared/guide-flow';
-import { guidePetSkillLabel, guideResonanceLabel } from '../src/renderer/guide-team';
+import { guidePetSkillLabel, guideResonanceLabel, guideStageLabel } from '../src/renderer/guide-team';
 import type { CatalogEntry } from '../src/shared/types';
 
 const project = resolve(import.meta.dirname, '..');
@@ -188,11 +188,11 @@ try {
   await launch();
   await page.locator('.guide-nav').getByRole('button', { name: /副本攻略/ }).click();
   await page.locator('.guide-page-header').getByRole('button', { name: '新建攻略', exact: true }).click();
-  await page.getByPlaceholder('例如：囚笼物理队单套流程').fill(fixture.name);
-  const stagesControl = page.locator('.guide-basic-form > label').filter({ hasText: /^适用副本/ }).locator('.n-select');
+  await page.getByPlaceholder('例如：囚笼物理队操作流程').fill(fixture.name);
+  const stagesControl = page.locator('.n-select[aria-label="适用副本"]');
   for (const id of fixture.stageIds) {
     const stage = entry(id);
-    await choose(stagesControl, `${stage.name}${stage.subtitle ? ' · ' + stage.subtitle : ''}`);
+    await choose(stagesControl, guideStageLabel(stage, sourceEntries));
   }
   await page.getByLabel('攻略记录时间', { exact: true }).fill(fixture.recordedAt);
   await page.locator('.guide-form-row label').filter({ hasText: '预计战斗时长' }).locator('input').fill(String(fixture.durationSeconds));
@@ -243,7 +243,7 @@ try {
   await addMainNode('attack');
   await addMainNode('switch');
   await select('切换目标机体', roleName('blue'));
-  await page.locator('.flow-mode-picker').getByRole('button', { name: '循环流程', exact: true }).click();
+  await select('循环入口', '第 1 步 · 普攻');
   assert.equal(await page.locator('.flow-return-edge').count(), 1);
   assert.equal(await page.locator('.flow-validation').count(), 0);
   await page.locator(`[data-flow-id="${holdId}"]`).click();
@@ -251,7 +251,7 @@ try {
   passed('真实操作建立全部节点类型、长短按、重复多角色QTE、两个并行分支及循环回边', { uiActions });
 
   await tab('基本信息');
-  await choose(page.locator('.guide-form-row label').filter({ hasText: '完成状态' }).locator('.n-select'), '已完成');
+  await choose(page.locator('.n-select[aria-label="完成状态"]'), '已完成');
   await page.locator('.guide-editor-toolbar').getByRole('button', { name: '保存攻略', exact: true }).click();
   await page.locator('.guides-page[data-guide-mode="detail"]').waitFor();
   let saved = (await savedGuides()).find(guide => guide.name === fixture.name)!;
@@ -308,9 +308,9 @@ try {
 
   await page.locator('.guide-detail-toolbar').getByRole('button', { name: '复制攻略', exact: true }).click();
   const copyName = `${fixture.name} · 单套副本`;
-  await page.getByPlaceholder('例如：囚笼物理队单套流程').fill(copyName);
+  await page.getByPlaceholder('例如：囚笼物理队操作流程').fill(copyName);
   await tab('操作流程');
-  await page.locator('.flow-mode-picker').getByRole('button', { name: '单套流程', exact: true }).click();
+  await page.locator('.n-select[aria-label="循环入口"] .n-base-clear').click();
   assert.equal(await page.locator('.flow-return-edge').count(), 0);
   await page.locator('.guide-editor-toolbar').getByRole('button', { name: '保存攻略', exact: true }).click();
   await page.locator('.guides-page[data-guide-mode="detail"]').waitFor();
@@ -319,7 +319,8 @@ try {
   assert.deepEqual(copied.team, saved.team);
   assert.equal(copied.flow.mode, 'single');
   assert.deepEqual(copied.flow.nodes, saved.flow.nodes);
-  await page.locator('.guide-detail-toolbar').getByRole('button', { name: '移至回收站', exact: true }).click();
+  await page.locator('.guide-detail-toolbar').getByRole('button', { name: '编辑攻略', exact: true }).click();
+  await page.locator('.guide-editor-toolbar').getByRole('button', { name: '移至回收站', exact: true }).click();
   await page.locator('.n-dialog').getByRole('button', { name: '移至回收站', exact: true }).click();
   await page.locator('.guides-page[data-guide-mode="list"]').waitFor();
   assert.equal((await savedGuides()).find(guide => guide.id === copied.id)!.hidden, true);
@@ -328,7 +329,7 @@ try {
   await page.getByRole('button', { name: '恢复攻略', exact: true }).click();
   assert.equal((await savedGuides()).find(guide => guide.id === copied.id)!.hidden, false);
   await page.getByRole('button', { name: '我的攻略', exact: true }).click();
-  passed('复制攻略保持独立记录，可切换为单套；回收与恢复保留全部队伍及流程');
+  passed('复制攻略保持独立记录，清除循环入口后执行一次；回收与恢复保留全部队伍及流程');
 
   await openGuide(saved.id);
   for (const theme of ['light', 'dark'] as const) {

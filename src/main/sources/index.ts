@@ -15,7 +15,7 @@ import type { SourceRow, SourceTables } from './common';
 export const myssalTablePaths: readonly string[] = [...new Set([...coreTablePaths, ...stageTablePaths, ...guideOptionTablePaths])];
 
 /** 规范化规则变化时递增，使同一上游提交重新生成资料。 */
-const normalizerVersion = 5;
+const normalizerVersion = 6;
 
 /** 来源读取选项，缓存目录由主进程限定在应用数据目录中。 @author chenjd @created 2026-11-06 13:40:00 */
 export interface SourceLoadOptions {
