@@ -89,7 +89,6 @@ npm run pack
 
 - 文字资料：[myssal/PGR_Data](https://github.com/myssal/PGR_Data)，读取远程国服所需文件并缓存版本。
 - 图片资源：[undertheobservers/PGR_Assets](https://github.com/undertheobservers/PGR_Assets)，按固定图片版本、按需获取，不下载整个仓库。
-- 界面布局与主题参考：[CC Switch](https://github.com/farion1231/cc-switch)。
 
 资料与图片可能存在更新延迟或缺项。静态副本配置包含历史内容，不代表本周开放名单；软件不读取游戏账号或实时战斗状态，也不执行游戏操作。
 

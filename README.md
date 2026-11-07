@@ -89,7 +89,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance, source-data te
 
 - Catalog: [myssal/PGR_Data](https://github.com/myssal/PGR_Data). Required CN-server files are fetched remotely and cached by version.
 - Artwork: [undertheobservers/PGR_Assets](https://github.com/undertheobservers/PGR_Assets). Images are pinned to a source version and downloaded on demand, without cloning the repository.
-- Layout and theme inspiration: [CC Switch](https://github.com/farion1231/cc-switch).
 
 Catalog and artwork updates may lag or contain gaps. Static stage configurations include historical content and are not a live weekly schedule. The app does not read game accounts or live battle state, and does not automate gameplay.
 
